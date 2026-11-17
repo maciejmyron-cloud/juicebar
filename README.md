@@ -1,108 +1,120 @@
-# Wireless Battery: edycja z kolorami marek
+# Wireless Battery: brand colors edition
 
-Pokazuje na pasku zadań Windows, ile baterii zostało w bezprzewodowej myszce, klawiaturze, słuchawkach i padzie.
-Sprzęt znanych marek dostaje ikonę w kolorze producenta: **Razer** na zielono, **Logitech** na jasnoniebiesko,
-**SteelSeries** na pomarańczowo, **Corsair** na żółto i tak dalej (15 marek, tabela niżej). Kolorowe urządzenia mają
-delikatną poświatę i cienki pasek poziomu pod procentami. Pozostałe wyglądają zwyczajnie.
+Battery levels of your wireless mouse, keyboard, headset and controller, right on the Windows taskbar,
+each one in its maker's color: **Razer** green, **Logitech** blue, **SteelSeries** orange, **Corsair** yellow
+and 11 more brands. Branded devices get a soft glow and a thin level bar under the percentage, like Razer Synapse
+or Logitech G HUB. Everything else keeps the plain Windows look.
 
-![Pasek zadań: słuchawki, myszka i klawiatura Logitech na niebiesko, myszka i klawiatura Razer na zielono](docs/screenshot-razer-logitech.png)
+![Taskbar: Logitech headset, mouse and keyboard in blue, Razer mouse and keyboard in green](docs/screenshot-razer-logitech.png)
 
-Wszystkie marki na ciemnym i jasnym pasku (u góry widżet na pasku, pod nim tryb ikon w zasobniku):
+All 15 brands on a dark and a light taskbar (top: taskbar widget, below: tray icon mode):
 
-![Kolory wszystkich marek na ciemnym i jasnym pasku zadań](docs/kolory-marek.png)
+![Brand colors of all 15 brands on a dark and a light taskbar](docs/brand-colors.png)
 
-| Marka | Kolor | Rozpoznawana po |
+This is a fork of [Wireless-Device-Battery-Monitor](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor)
+by krisgfx9 (version 1.0.5, GPL-3). All device support comes from the original. This fork changes the look
+and fixes a few things.
+
+## Brands
+
+| Brand | Color | Recognized by |
 | --- | --- | --- |
-| Razer | zielony `#44D62C` | odbiorniki i Bluetooth Razera, słuchawki BlackShark / Barracuda, nazwa „Razer …” |
-| Logitech | jasnoniebieski `#00B8FC` | Unifying, Bolt, Lightspeed, Bluetooth, nazwy „MX …”, „G915”, „K380” |
-| SteelSeries | pomarańczowy `#FF5200` | odbiorniki SteelSeries, nazwy „Arctis”, „Aerox”, „Rival” |
-| Corsair | żółty `#F5E41A` | odbiorniki Corsair (Slipstream), słuchawki przez HeadsetControl |
-| HyperX | czerwony `#E31837` | odbiorniki HyperX, nazwa „HyperX …”, „Pulsefire” |
-| ASUS ROG | czerwony `#FF0029` | odbiorniki ROG, nazwa „ROG …” |
-| ZOWIE | czerwony `#E2231A` | odbiorniki ZOWIE |
-| PlayStation | niebieski `#0070D1` | DualSense, DualShock 4, słuchawki INZONE |
-| Xbox | zielony `#107C10` | pady i słuchawki Xbox |
-| Samsung | niebieski `#1428A0` | Galaxy Buds, telefon Galaxy (Phone Link) |
-| Apple | srebrny | AirPods, Magic Mouse / Keyboard / Trackpad |
-| Jabra | żółty `#FFC800` | odbiornik Jabra Link, nazwa „Jabra …” |
-| JBL | pomarańczowoczerwony `#FF3D00` | słuchawki JBL Quantum, nazwa „JBL …” |
-| Cooler Master | fioletowy | myszy Cooler Master |
-| Steam | niebieski `#1A9FFF` | Steam Controller |
+| Razer | green `#44D62C` | Razer receivers and Bluetooth, BlackShark / Barracuda headsets, "Razer …" names |
+| Logitech | light blue `#00B8FC` | Unifying, Bolt, Lightspeed, Bluetooth; names like "MX …", "G915", "K380" |
+| SteelSeries | orange `#FF5200` | SteelSeries receivers; "Arctis", "Aerox", "Rival" |
+| Corsair | yellow `#F5E41A` | Corsair receivers, Corsair headsets via HeadsetControl |
+| HyperX | red `#E31837` | HyperX receivers; "HyperX …", "Pulsefire" |
+| ASUS ROG | red `#FF0029` | ROG receivers; "ROG …" |
+| ZOWIE | red `#E2231A` | ZOWIE receivers |
+| PlayStation | blue `#0070D1` | DualSense, DualShock 4, INZONE headsets |
+| Xbox | green `#107C10` | Xbox controllers and headsets |
+| Samsung | blue `#1428A0` | Galaxy Buds, Galaxy phones (Phone Link) |
+| Apple | silver | AirPods, Magic Mouse / Keyboard / Trackpad |
+| Jabra | amber `#FFC800` | Jabra Link dongle; "Jabra …" |
+| JBL | red-orange `#FF3D00` | JBL Quantum headsets; "JBL …" |
+| Cooler Master | purple | Cooler Master mice |
+| Steam | blue `#1A9FFF` | Steam Controller |
 
-Ciemne kolory (Xbox, PlayStation, Samsung) są na ciemnym pasku rozjaśnione, a jasne (żółte, srebrny) na jasnym
-pasku przyciemnione, żeby zawsze było je widać. Słuchawki Sony z serii WH- / WF-, myszy HP i Microsoft Surface
-mają ten sam numer producenta co PlayStation, HyperX i Xbox, ale nie dostają ich koloru.
+The brand is picked from the driver that found the device first, then the USB / Bluetooth vendor ID, then the name.
+Dark brand colors (Xbox, PlayStation, Samsung) are brightened on a dark taskbar, and yellow and silver are deepened on
+a light one, so every color stays readable on both. Shared vendor IDs don't leak colors: HP mice (shared with HyperX),
+Microsoft Surface mice (shared with Xbox) and Sony WH- / WF- headphones (shared with PlayStation) stay plain.
 
-To przeróbka programu [Wireless-Device-Battery-Monitor](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor)
-(autor: krisgfx9, wersja 1.0.5, licencja GPL-3). Cała obsługa urządzeń pochodzi z oryginału,
-tutaj zmieniony jest tylko wygląd i kilka drobiazgów.
+Colors and rules live in one file, [`src/brands.cpp`](src/brands.cpp). Adding a brand takes one enum value in
+[`src/brands.h`](src/brands.h) and a line in each table.
 
-## Pobieranie i instalacja
+## Download and install
 
-1. Wejdź w **[Releases](../../releases/latest)** i pobierz `WirelessBattery-Setup-….exe`.
-2. Uruchom i klikaj „Dalej”. Nie potrzeba uprawnień administratora ani żadnych innych programów.
-   Instalator może od razu włączyć uruchamianie z Windows.
+1. Open **[Releases](../../releases/latest)** and download `WirelessBattery-Setup-….exe`.
+2. Run it and click Next. No administrator rights and no other software needed. Setup can turn on
+   "start with Windows" for you.
 
-Wolisz bez instalatora? Pobierz `WirelessBattery-…-portable.zip`, rozpakuj gdziekolwiek i uruchom `WirelessBattery.exe`.
+Prefer no installer? Download `WirelessBattery-…-portable.zip`, unzip anywhere and run `WirelessBattery.exe`.
 
-**Ostrzeżenie Windows („System Windows ochronił ten komputer”):** program nie ma płatnego podpisu cyfrowego,
-więc Windows go nie zna. Kliknij *Więcej informacji → Uruchom mimo to*. Plik budują automaty GitHuba
-z kodu widocznego w tym repo (zakładka *Actions*), nikt nie wgrywa go ręcznie.
+**"Windows protected your PC" warning:** the app has no paid code-signing certificate, so Windows doesn't know it yet.
+Click *More info → Run anyway*. The files are built by GitHub Actions from the code in this repo (see the *Actions* tab).
+Nobody uploads them by hand.
 
-## Obsługa
+**Language:** menus, tooltips and the installer are in Polish in this fork. The original app is in English.
 
-- Wskaźniki pojawiają się na pasku obok zegara i odświeżają co minutę, a od razu po podłączeniu urządzenia.
-- **Kliknięcie** otwiera menu: lista urządzeń (kliknięcie ukrywa albo pokazuje urządzenie), odświeżanie,
-  „Uruchamiaj z Windows”, zamknięcie.
-- Czerwona liczba oznacza baterię na poziomie 15% albo niższym. Niebieski piorun oznacza ładowanie.
-  Przygaszony wskaźnik to ostatni znany odczyt (urządzenie śpi).
-- Najedź myszką, żeby zobaczyć pełne nazwy i stan.
+## Usage
 
-## Co się różni od oryginału
+- The indicators sit on the taskbar next to the clock. They refresh every minute, and right away when a device
+  connects.
+- **Click** for the menu: device list (click a device to hide or show it), refresh, start with Windows, exit.
+- A red number means 15% or less. A blue bolt means charging. A dimmed indicator is the last known reading
+  (the device is asleep).
+- Hover to see full device names and status.
 
-- **Kolory producenta** dla 15 marek (tabela wyżej). Marka jest rozpoznawana kolejno po sterowniku, który znalazł
-  urządzenie, po numerze producenta (USB/Bluetooth) i po nazwie. Kolory i reguły są w jednym pliku: `src/brands.cpp`.
-  W trybie ikon w zasobniku kolor marki ma pasek pod liczbą.
-- **Menu i podpowiedzi po polsku.**
-- **Ładniejsze nazwy:** „DSV2 Pro” to „Razer DeathStalker V2 Pro”. Znika też przedrostek „LE-” z nazw słuchawek Bluetooth.
-- **Poprawka Bluetooth:** słuchawki z dwoma rodzajami połączenia (klasyczny Bluetooth i LE Audio, np. Bose QC Ultra)
-  nie znikają już z paska, gdy Windows wyliczy najpierw nieużywane połączenie.
-- **`WirelessBattery.exe --demo`:** pokazuje przykładowe urządzenia Razer i Logitech, a `--demo=all` po jednym
-  urządzeniu każdej marki (do zrzutów ekranu i sprawdzenia kolorów bez sprzętu). `--preview plik.bmp` rysuje
-  wszystkie marki na ciemnym i jasnym pasku do pliku. `--list` wypisuje urządzenia razem z rozpoznaną marką.
+## What's different from the original
 
-## Obsługiwany sprzęt
+- **Brand colors** for 15 brands (table above), with a glow and a level bar in widget mode and a colored bar in
+  tray icon mode.
+- **Friendlier names:** "DSV2 Pro" becomes "Razer DeathStalker V2 Pro", and the "LE-" prefix disappears from
+  Bluetooth headset names.
+- **Bluetooth fix:** dual-mode headsets (classic Bluetooth plus LE Audio, e.g. Bose QC Ultra) no longer drop off the
+  taskbar when Windows lists the unused connection first.
+- **Sleeping Razer mice stay on the taskbar**, dimmed, with their last reading. In the original they disappeared and
+  came back up to a minute after waking.
+- **Polish interface** (menus, tooltips, low battery notification, installer).
+- **Command line:** `--demo` shows sample Razer and Logitech devices, `--demo=all` one device of every brand (for
+  screenshots or checking colors without the hardware). `--preview file.bmp` draws every brand on a dark and a light
+  taskbar into one image. `--list` prints the devices it finds with the detected brand.
 
-Taki sam jak w oryginale: myszy, klawiatury i słuchawki Logitecha (Unifying, Bolt, Lightspeed, Bluetooth),
-Razera (odbiorniki HyperSpeed, Bluetooth, słuchawki BlackShark), SteelSeries, Corsair, HyperX i wielu innych,
-a do tego wszystko, co pokazuje baterię w *Ustawienia → Bluetooth i urządzenia*. Pełna lista jest
-w [opisie oryginału](docs/ORIGINAL-README.md#supported-devices).
+## Supported hardware
 
-Logitech G HUB, Razer Synapse i inne programy producentów mogą działać równolegle, nie przeszkadzają sobie.
+Same as the original: mice, keyboards and headsets from Logitech (Unifying, Bolt, Lightspeed, Bluetooth), Razer
+(HyperSpeed receivers, Bluetooth, BlackShark headsets), SteelSeries, Corsair, HyperX and many more, plus anything
+that shows its battery in *Settings → Bluetooth & devices*. Full list:
+[original README](docs/ORIGINAL-README.md#supported-devices).
 
-## Bezpieczeństwo
+Logitech G HUB, Razer Synapse and other vendor apps can keep running alongside it.
 
-Program nie łączy się z internetem i niczego nie pobiera. Do urządzeń wysyła tylko zapytania „podaj stan baterii”.
-W rejestrze zapisuje tylko swoje ustawienia (`HKCU\Software\WirelessBattery`) i, jeśli to włączysz, wpis
-autostartu. Ta wersja używa tych samych ustawień co oryginał, więc nie instaluj obu naraz.
+## Privacy and safety
 
-## Budowanie ze źródeł
+The app never connects to the internet and downloads nothing. It only asks devices for their battery status.
+In the registry it writes just its own settings (`HKCU\Software\WirelessBattery`) and, if you turn it on, a startup
+entry. It shares those settings with the original app, so don't run both at once.
 
-Potrzebny jest [MinGW-w64](https://www.mingw-w64.org/), np. przenośny [WinLibs](https://winlibs.com/):
+## Building from source
+
+You need [MinGW-w64](https://www.mingw-w64.org/), e.g. the portable [WinLibs](https://winlibs.com/) build:
 
 ```
 mingw32-make CXX=g++ WINDRES=windres
+mingw32-make test CXX=g++
 ```
 
-Instalator i wersję przenośną buduje `installer\build-installer.ps1` (wymaga [Inno Setup](https://jrsoftware.org/isinfo.php)).
-Wypchnięcie tagu `v…` buduje i publikuje wydanie automatycznie (GitHub Actions).
+`installer\build-installer.ps1` builds the installer and the portable zip
+(needs [Inno Setup](https://jrsoftware.org/isinfo.php)). Pushing a `v…` tag builds and publishes a release
+automatically (GitHub Actions).
 
-## Licencja i autorzy
+## License and credits
 
-[GNU GPL v3.0 lub nowsza](LICENSE), tak jak oryginał. Oryginalny program i wszystkie protokoły urządzeń:
-[krisgfx9 i współautorzy](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor) (podziękowania dla źródeł
-są w [opisie oryginału](docs/ORIGINAL-README.md#credits)). Do instalatora dołączony jest
+[GNU GPL v3.0 or later](LICENSE), same as the original. The original app and all device protocols:
+[krisgfx9 and contributors](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor) (their credits are in the
+[original README](docs/ORIGINAL-README.md#credits)). The installer bundles
 [HeadsetControl](https://github.com/Sapd/HeadsetControl) (GPL-3).
 
-Nazwy marek z tabeli to znaki towarowe ich właścicieli. Ten projekt nie jest z nimi związany, a kolory służą tylko
-do rozpoznania sprzętu na pasku.
+All brand names in the table are trademarks of their owners. This project is not affiliated with any of them.
+The colors only help you tell your devices apart on the taskbar.

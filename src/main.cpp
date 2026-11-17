@@ -256,11 +256,13 @@ HICON RenderIcon(const std::wstring& text, int barPct, Rgb textColor, Rgb barCol
 
 Rgb Foreground() { return g_lightTaskbar ? Rgb{ 0, 0, 0 } : Rgb{ 255, 255, 255 }; }
 
-HICON IconFor(int pct, bool charging, bool dim) {
+HICON IconFor(int pct, bool charging, bool dim, Accent accent) {
     Rgb fg = Foreground();
     Rgb bar = charging        ? Rgb{ 0, 170, 255 }
             : pct <= LOW_BATTERY ? Rgb{ 232, 32, 48 }
             : pct <= 30       ? Rgb{ 255, 150, 0 }
+            : accent == Accent::Razer    ? Rgb{ 68, 214, 44 }   // Razer green #44D62C
+            : accent == Accent::Logitech ? Rgb{ 0, 184, 252 }   // Logitech G blue #00B8FC
                               : Rgb{ 30, 190, 90 };
     Rgb text = (!charging && pct >= 0 && pct <= LOW_BATTERY) ? Rgb{ 240, 50, 60 } : fg;
     std::wstring t = pct < 0 ? L"?" : std::to_wstring(pct);
@@ -276,16 +278,75 @@ void CopyTip(wchar_t* dst, size_t cap, const std::wstring& s) {
 
 std::wstring StatusText(const TrayEntry& e) {
     const auto& s = e.st;
-    if (!s.connected) return L"off / not connected";
+    if (!s.connected) return L"wyłączone / niepołączone";
     std::wstring t;
     if (!s.levelText.empty() && s.percent >= 0) t = s.levelText;
     else if (s.percent >= 0) t = std::to_wstring(s.percent) + L"%";
-    else if (e.lastPct >= 0) t = std::to_wstring(e.lastPct) + L"% (last known)";
-    else t = L"unknown";
+    else if (e.lastPct >= 0) t = std::to_wstring(e.lastPct) + L"% (ostatni odczyt)";
+    else t = L"brak danych";
     if (!s.detail.empty() && s.percent >= 0) t += L" (" + s.detail + L")";
-    if (s.charging) t += L", charging";
-    if (s.asleep) t += L", asleep";
+    if (s.charging) t += L", ładuje się";
+    if (s.asleep) t += L", uśpione";
     return t;
+}
+
+// ---- brand touches (Razer green, Logitech blue) -----------------------------------------------
+
+std::wstring Lower(std::wstring s) {
+    for (auto& c : s) c = towlower(c);
+    return s;
+}
+
+bool StartsWith(const std::wstring& s, const wchar_t* p) { return s.rfind(p, 0) == 0; }
+
+bool IsRazer(const DeviceStatus& s) {
+    // 1532: Razer over USB and its receivers. 068E: the id Razer keyboards report over Bluetooth LE
+    // (seen on the DeathStalker V2 Pro; Razer's own driver lists it as RZCONTROL\VID_068E).
+    if (s.vid == 0x1532 || s.vid == 0x068E) return true;
+    for (const wchar_t* k : { L"razer:", L"blackshark:", L"barracuda:" })
+        if (StartsWith(s.key, k)) return true;
+    return Lower(s.name).find(L"razer") != std::wstring::npos;
+}
+
+bool IsLogitech(const DeviceStatus& s) {
+    if (s.vid == 0x046D || StartsWith(s.key, L"logi:") || StartsWith(s.key, L"g435:")) return true;
+    std::wstring n = Lower(s.name);
+    if (n.find(L"logitech") != std::wstring::npos || StartsWith(n, L"logi ")) return true;
+    // Bluetooth names often leave the brand out: "MX Master 3S", "MX Keys S", "LIFT", "POP Mouse", "Pebble M350".
+    for (const wchar_t* p : { L"mx ", L"lift", L"pop mouse", L"pop keys", L"pebble", L"ergo k", L"ergo m" })
+        if (StartsWith(n, p)) return true;
+    // ... or are just a model number: "K380", "M720 Triathlon", "G915", "G502 X".
+    return n.size() >= 4 && (n[0] == L'g' || n[0] == L'k' || n[0] == L'm') && iswdigit(n[1]) && iswdigit(n[2]) &&
+           iswdigit(n[3]) && (n.size() == 4 || !iswalnum(n[4]));
+}
+
+Accent BrandOf(const DeviceStatus& s) {
+    if (IsRazer(s)) return Accent::Razer;
+    if (IsLogitech(s)) return Accent::Logitech;
+    return Accent::None;
+}
+
+// Friendlier names and a reliable mouse / keyboard icon for Razer gear on Bluetooth, whose
+// short Bluetooth names ("DSV2 Pro") say nothing about the device type.
+void Polish(DeviceStatus& s) {
+    for (const wchar_t* p : { L"LE-", L"LE_" })  // "LE-Bose QC Ultra Headphones", "LE_WH-1000XM3"
+        if (s.name.size() > 3 && s.name.compare(0, 3, p) == 0) s.name = s.name.substr(3);
+    static const std::pair<const wchar_t*, const wchar_t*> kNames[] = {
+        { L"DSV2 Pro", L"Razer DeathStalker V2 Pro" },
+        { L"DSV2", L"Razer DeathStalker V2" },
+        { L"DSV2 Pro TKL", L"Razer DeathStalker V2 Pro TKL" },
+    };
+    for (auto& [from, to] : kNames)
+        if (s.name == from) s.name = to;
+    if (!IsRazer(s)) return;
+    std::wstring n = Lower(s.name);
+    auto has = [&](const wchar_t* w) { return n.find(w) != std::wstring::npos; };
+    if (has(L"deathstalker") || has(L"blackwidow") || has(L"huntsman") || has(L"ornata") || has(L"cynosa") ||
+        has(L"joro") || has(L"keyboard"))
+        s.kind = DeviceKind::Keyboard;
+    else if (has(L"deathadder") || has(L"basilisk") || has(L"viper") || has(L"naga") || has(L"orochi") ||
+             has(L"cobra") || has(L"mamba") || has(L"pro click") || has(L"lancehead") || has(L"atheris"))
+        s.kind = DeviceKind::Mouse;
 }
 
 void TrayCall(DWORD msg, UINT uid, HICON icon, const std::wstring& tip, const wchar_t* infoTitle = nullptr,
@@ -326,7 +387,7 @@ void UpdatePlaceholder() {
     for (auto& [k, e] : g_entries) any |= e.added;
     if (!any && !g_placeholder) {
         if (!g_placeholderIcon) g_placeholderIcon = RenderIcon(L"-", -1, Foreground(), Foreground(), true);
-        TrayCall(NIM_ADD, PLACEHOLDER_ID, g_placeholderIcon, L"Wireless Battery\nNo devices with battery info found");
+        TrayCall(NIM_ADD, PLACEHOLDER_ID, g_placeholderIcon, L"Wireless Battery\nNie znaleziono urządzeń z informacją o baterii");
         g_placeholder = true;
     } else if (any && g_placeholder) {
         TrayDelete(PLACEHOLDER_ID);
@@ -343,10 +404,12 @@ void ApplyEntry(TrayEntry& e) {
     }
     int shown = s.percent >= 0 ? s.percent : e.lastPct;
     bool dim = s.percent < 0;
-    std::wstring sig = std::to_wstring(shown) + (s.charging ? L"c" : L"") + (dim ? L"d" : L"") + (g_lightTaskbar ? L"l" : L"k");
+    Accent accent = BrandOf(s);
+    std::wstring sig = std::to_wstring(shown) + (s.charging ? L"c" : L"") + (dim ? L"d" : L"") + (g_lightTaskbar ? L"l" : L"k") +
+                       L"a" + std::to_wstring((int)accent);
     if (sig != e.iconSig || !e.icon) {
         if (e.icon) DestroyIcon(e.icon);
-        e.icon = IconFor(shown, s.charging, dim);
+        e.icon = IconFor(shown, s.charging, dim, accent);
         e.iconSig = sig;
     }
     std::wstring tip = s.name + L"\n" + StatusText(e);
@@ -356,8 +419,8 @@ void ApplyEntry(TrayEntry& e) {
     if (s.charging || shown > LOW_BATTERY + 10) e.lowWarned = false;
     if (!s.charging && s.percent >= 0 && s.percent <= LOW_BATTERY && !e.lowWarned) {
         e.lowWarned = true;
-        infoTitle = L"Low battery";
-        info = s.name + L" is at " + std::to_wstring(s.percent) + L"%";
+        infoTitle = L"Słaba bateria";
+        info = s.name + L": zostało " + std::to_wstring(s.percent) + L"%";
     }
     TrayCall(e.added ? NIM_MODIFY : NIM_ADD, e.uid, e.icon, tip, infoTitle, info);
     e.added = true;
@@ -394,17 +457,19 @@ void UpdateWidget() {
         it.dim = e->st.percent < 0;
         it.low = !it.charging && it.percent >= 0 && it.percent <= LOW_BATTERY;
         it.bluetooth = e->st.via == L"Bluetooth";
+        it.accent = BrandOf(e->st);
         items.push_back(it);
         if (!tip.empty()) tip += L"\n";
         tip += e->st.name + L": " + StatusText(*e);
     }
-    if (tip.empty()) tip = L"Wireless Battery: no devices with battery info found";
+    if (tip.empty()) tip = L"Wireless Battery: nie znaleziono urządzeń z informacją o baterii";
     widget::SetItems(items, tip);
 }
 
 void OnResults(std::vector<DeviceStatus>& results) {
     std::map<std::wstring, bool> seen;
     for (auto& s : results) {
+        Polish(s);
         auto& e = g_entries[s.key];
         if (!e.uid) e.uid = StableId(s.key);
         e.st = s;
@@ -492,25 +557,25 @@ void ShowMenu() {
     ApplyMenuTheme(g_lightTaskbar);
     HMENU m = CreatePopupMenu();
     std::vector<std::wstring> keys;  // menu id ID_DEVICE_FIRST + i -> device key
-    if (g_entries.empty()) AppendMenuW(m, MF_STRING | MF_GRAYED, 0, L"No devices with battery info found");
-    else AppendMenuW(m, MF_STRING | MF_GRAYED, 0, L"Click a device to show or hide it");
+    if (g_entries.empty()) AppendMenuW(m, MF_STRING | MF_GRAYED, 0, L"Nie znaleziono urządzeń z informacją o baterii");
+    else AppendMenuW(m, MF_STRING | MF_GRAYED, 0, L"Kliknij urządzenie, żeby je pokazać albo ukryć");
     for (auto& [k, e] : g_entries) {
         std::wstring line = e.st.name + L":  " + StatusText(e) + L"   [" + e.st.via + L"]";
         AppendMenuW(m, MF_STRING | (IsHidden(k) ? 0 : MF_CHECKED), ID_DEVICE_FIRST + (UINT)keys.size(), line.c_str());
         keys.push_back(k);
     }
-    AppendMenuW(m, MF_STRING | (g_hideLastKnown ? MF_CHECKED : 0), ID_HIDE_LAST_KNOWN, L"Hide last known / asleep devices");
+    AppendMenuW(m, MF_STRING | (g_hideLastKnown ? MF_CHECKED : 0), ID_HIDE_LAST_KNOWN, L"Ukrywaj uśpione urządzenia (ostatni odczyt)");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(m, MF_STRING | (g_wantWidget ? MF_CHECKED : 0), ID_MODE_WIDGET, L"Show on the taskbar (icon + percentage)");
-    AppendMenuW(m, MF_STRING | (!g_wantWidget ? MF_CHECKED : 0), ID_MODE_TRAY, L"Show as tray icons");
+    AppendMenuW(m, MF_STRING | (g_wantWidget ? MF_CHECKED : 0), ID_MODE_WIDGET, L"Na pasku zadań (ikona + procent)");
+    AppendMenuW(m, MF_STRING | (!g_wantWidget ? MF_CHECKED : 0), ID_MODE_TRAY, L"Jako ikony w zasobniku");
     CheckMenuRadioItem(m, ID_MODE_WIDGET, ID_MODE_TRAY, g_wantWidget ? ID_MODE_WIDGET : ID_MODE_TRAY, MF_BYCOMMAND);
     UINT bgFlags = MF_STRING | (g_widgetBackground ? MF_CHECKED : 0) | (g_wantWidget ? 0 : MF_GRAYED);
-    AppendMenuW(m, bgFlags, ID_WIDGET_BACKGROUND, L"Background behind taskbar text (for transparent taskbars)");
+    AppendMenuW(m, bgFlags, ID_WIDGET_BACKGROUND, L"Tło pod napisami (dla przezroczystego paska)");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(m, MF_STRING, ID_REFRESH, L"Refresh now");
-    AppendMenuW(m, MF_STRING | (AutostartEnabled() ? MF_CHECKED : 0), ID_AUTOSTART, L"Start with Windows");
+    AppendMenuW(m, MF_STRING, ID_REFRESH, L"Odśwież teraz");
+    AppendMenuW(m, MF_STRING | (AutostartEnabled() ? MF_CHECKED : 0), ID_AUTOSTART, L"Uruchamiaj z Windows");
     AppendMenuW(m, MF_SEPARATOR, 0, nullptr);
-    AppendMenuW(m, MF_STRING, ID_EXIT, L"Exit");
+    AppendMenuW(m, MF_STRING, ID_EXIT, L"Zamknij");
     POINT pt;
     GetCursorPos(&pt);
     SetForegroundWindow(g_hwnd);
@@ -540,9 +605,34 @@ void ShowMenu() {
 
 // ---- worker thread ----------------------------------------------------------------------------
 
+// `--demo`: sample Razer and Logitech devices instead of real ones (screenshots, checking the colours
+// without the hardware). "G915 TKL" has no vendor id on purpose: it exercises the name-based match.
+bool g_demo = false;
+
+std::vector<DeviceStatus> DemoDevices() {
+    auto make = [](const wchar_t* key, const wchar_t* name, DeviceKind kind, int pct, unsigned short vid, bool charging) {
+        DeviceStatus s;
+        s.key = key;
+        s.name = name;
+        s.kind = kind;
+        s.percent = pct;
+        s.vid = vid;
+        s.charging = charging;
+        s.via = L"demo";
+        return s;
+    };
+    return {
+        make(L"demo:headset", L"Logitech G PRO X 2 LIGHTSPEED", DeviceKind::Headset, 72, 0x046D, false),
+        make(L"demo:logi-mouse", L"Logitech G502 X PLUS", DeviceKind::Mouse, 64, 0x046D, false),
+        make(L"demo:logi-kbd", L"G915 TKL", DeviceKind::Keyboard, 12, 0, false),
+        make(L"demo:razer-mouse", L"Razer DeathAdder V3 Pro", DeviceKind::Mouse, 30, 0x1532, false),
+        make(L"demo:razer-kbd", L"DSV2 Pro", DeviceKind::Keyboard, 98, 0x068E, true),
+    };
+}
+
 DWORD WINAPI Worker(LPVOID) {
     for (;;) {
-        auto* v = new std::vector<DeviceStatus>(PollAllDevices());
+        auto* v = new std::vector<DeviceStatus>(g_demo ? DemoDevices() : PollAllDevices());
         if (!PostMessageW(g_hwnd, WM_RESULTS, 0, (LPARAM)v)) delete v;
         HANDLE hs[2] = { g_stopEvt, g_refreshEvt };
         if (WaitForMultipleObjects(2, hs, FALSE, POLL_INTERVAL_MS) == WAIT_OBJECT_0) return 0;
@@ -631,7 +721,10 @@ int ListToConsole(bool dump) {
     auto list = PollAllDevices();
     if (list.empty()) write(L"No devices with battery info found.\n");
     for (auto& s : list) {
-        std::wstring line = s.name + L"  [" + s.via + L"]  ";
+        Polish(s);
+        Accent accent = BrandOf(s);
+        std::wstring line = s.name + L"  [" + s.via + L"]  " +
+                            (accent == Accent::Razer ? L"{Razer}  " : accent == Accent::Logitech ? L"{Logitech}  " : L"");
         if (!s.connected) line += L"off / not connected";
         else if (s.asleep) line += L"asleep";
         else if (!s.levelText.empty()) line += s.levelText;
@@ -658,6 +751,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
         return 0;
     }
     g_inst = inst;
+    g_demo = cmdLine && wcsstr(cmdLine, L"--demo");
 
     HANDLE mutex = CreateMutexW(nullptr, TRUE, L"Local\\WirelessBatteryTray");
     if (GetLastError() == ERROR_ALREADY_EXISTS) return 0;

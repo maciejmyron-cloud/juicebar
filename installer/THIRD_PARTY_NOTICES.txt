@@ -1,4 +1,4 @@
-Wireless Battery bundles the following third-party software.
+Wireless Battery (Razer + Logitech edition, based on github.com/krisgfx9/Wireless-Device-Battery-Monitor) bundles the following third-party software.
 
 HeadsetControl 4.3.0 (headsetcontrol.exe)
   Copyright (C) the HeadsetControl contributors

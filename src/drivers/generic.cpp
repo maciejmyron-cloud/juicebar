@@ -196,7 +196,7 @@ void PollBluetooth(PollContext& ctx) {
             DEVPROP_BOOLEAN conn;
             if (SetupDiGetDevicePropertyW(di, &dd, &kIsConnected, &t, (PBYTE)&conn, sizeof(conn), nullptr, 0) &&
                 t == DEVPROP_TYPE_BOOLEAN)
-                containerConn[cid] = conn != DEVPROP_FALSE;
+                containerConn[cid] = containerConn[cid] || conn != DEVPROP_FALSE;  // any main node (classic or LE) connected
         }
 
         BYTE pct = 0;

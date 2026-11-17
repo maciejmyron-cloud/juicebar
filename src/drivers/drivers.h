@@ -19,6 +19,7 @@ struct PollContext {
     void Claim(USHORT vid, USHORT pid) { claimed.insert({ vid, pid }); }
     void Add(const DeviceStatus& s, USHORT vid, USHORT pid) {
         out.push_back(s);
+        if (!out.back().vid) out.back().vid = vid;
         Claim(vid, pid);
     }
     // Distinct (vid, pid) pairs for a vendor that are not claimed yet.

@@ -6,6 +6,10 @@
 #include <vector>
 #include "devices.h"
 
+// Brand look for a device: icon in the brand colour with a soft glow, and a thin level bar under
+// the percentage (like Razer Synapse / Logitech G HUB). None keeps the plain system look.
+enum class Accent { None, Razer, Logitech };
+
 struct WidgetItem {
     DeviceKind kind = DeviceKind::Other;
     int  percent  = -1;     // -1 = unknown
@@ -14,6 +18,7 @@ struct WidgetItem {
     bool dim      = false;  // asleep / stale value
     bool low      = false;
     bool bluetooth = false;  // picks the Bluetooth icon when the device type is unknown
+    Accent accent  = Accent::None;
 };
 
 namespace widget {

@@ -142,7 +142,10 @@ void PollRazer(PollContext& ctx) {
             s.via = L"Razer receiver";
             s.graceSec = 120;  // retain the last reading briefly when Synapse prevents a valid reply
             if (res == Rz::Offline) {
-                s.connected = false;
+                // The receiver answers but the device does not: it is asleep (a DeathAdder V3 Pro sleeps
+                // after about a minute idle) or switched off. Keep its last reading on screen, dimmed,
+                // instead of hiding it and bringing it back up to a minute after it wakes.
+                s.asleep = true;
             } else {
                 s.percent = Clamp100((args[1] * 100 + 127) / 255);
                 std::vector<BYTE> ch;

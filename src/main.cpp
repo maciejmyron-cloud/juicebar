@@ -752,8 +752,9 @@ int ListToConsole(bool dump) {
 // `--preview <file.bmp>`: every brand drawn the way the taskbar widget and the tray icons draw it, on a
 // dark and on a light taskbar, in one picture. For checking colours and contrast without switching the
 // Windows theme or owning the hardware.
-int Preview(const std::wstring& path) {
-    const int dpi = 144;  // 150 %
+// `--plain` draws the original look (no brand colours) for side-by-side comparisons; `--dpi=N` sets the
+// scale (default 144 = 150 %).
+int Preview(const std::wstring& path, int dpi, bool plain) {
     const int rowH = MulDiv(48, dpi, 96);
     auto devices = DemoAllBrands();
     std::vector<WidgetItem> items;
@@ -764,7 +765,7 @@ int Preview(const std::wstring& path) {
         it.percent = s.percent;
         it.charging = s.charging;
         it.low = !s.charging && s.percent >= 0 && s.percent <= LOW_BATTERY;
-        it.accent = BrandOf(s);
+        it.accent = plain ? Accent::None : BrandOf(s);
         items.push_back(it);
     }
     int wDark = 0, wLight = 0;
@@ -841,11 +842,19 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
         return 0;
     }
     if (const wchar_t* p = cmdLine ? wcsstr(cmdLine, L"--preview") : nullptr) {
+        // --preview "C:\some dir\file.bmp" [--plain] [--dpi=192]
         std::wstring path = p + 9;
-        path.erase(0, path.find_first_not_of(L" \""));
-        if (size_t q = path.find(L'"'); q != std::wstring::npos) path.erase(q);
-        while (!path.empty() && path.back() == L' ') path.pop_back();
-        return Preview(path.empty() ? L"preview.bmp" : path);
+        path.erase(0, path.find_first_not_of(L' '));
+        if (!path.empty() && path[0] == L'"') {
+            path.erase(0, 1);
+            if (size_t q = path.find(L'"'); q != std::wstring::npos) path.erase(q);
+        } else if (size_t sp = path.find(L' '); sp != std::wstring::npos) {
+            path.erase(sp);
+        }
+        if (path.empty() || path.rfind(L"--", 0) == 0) path = L"preview.bmp";
+        int dpi = 144;
+        if (const wchar_t* d = wcsstr(cmdLine, L"--dpi=")) dpi = std::clamp(_wtoi(d + 6), 96, 480);
+        return Preview(path, dpi, wcsstr(cmdLine, L"--plain") != nullptr);
     }
     g_inst = inst;
     g_demo = cmdLine && wcsstr(cmdLine, L"--demo");

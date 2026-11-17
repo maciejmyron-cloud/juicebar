@@ -1,4 +1,4 @@
-﻿; Inno Setup script for Wireless Battery (kolory marek). Saved as UTF-8 with BOM: Inno Setup needs the BOM to read the Polish text.
+﻿; Inno Setup script for JuiceBar (a fork of Wireless Battery). Saved as UTF-8 with BOM.
 ; Inno Setup: https://jrsoftware.org/isinfo.php. Based on github.com/krisgfx9/Wireless-Device-Battery-Monitor.
 ; Per-user install by default: no administrator rights needed, installs to %LOCALAPPDATA%\Programs.
 ; Setup also offers "Install for all users" (Program Files, needs administrator rights).
@@ -8,16 +8,17 @@
   #define AppVersion "1.0.0"
 #endif
 #define Root ".."
-; Was "Wireless Battery (Razer + Logitech)" up to 1.0.5-rl.1; same AppId, so it upgrades in place.
-#define AppTitle "Wireless Battery (kolory marek)"
+; Was "Wireless Battery (Razer + Logitech)" up to 1.0.5-rl.1; same AppId, so it upgrades in place
+; (an upgrade keeps the folder it was installed to; only new installs use the JuiceBar folder).
+#define AppTitle "JuiceBar"
 
 [Setup]
 AppId={{E33CB974-CD17-4C2D-84EF-13A2E175D8F0}
 AppName={#AppTitle}
 AppVersion={#AppVersion}
 AppVerName={#AppTitle} {#AppVersion}
-AppPublisher=Wireless Battery contributors (fork: maciejmyron-cloud)
-DefaultDirName={autopf}\Wireless Battery RL
+AppPublisher=JuiceBar (maciejmyron-cloud), based on Wireless Battery by krisgfx9
+DefaultDirName={autopf}\JuiceBar
 DisableProgramGroupPage=yes
 DisableDirPage=auto
 PrivilegesRequired=lowest
@@ -26,7 +27,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 OutputDir={#Root}\dist
-OutputBaseFilename=WirelessBattery-Setup-{#AppVersion}
+OutputBaseFilename=JuiceBar-Setup-{#AppVersion}
 SetupIconFile={#Root}\res\app.ico
 UninstallDisplayIcon={app}\WirelessBattery.exe
 UninstallDisplayName={#AppTitle}
@@ -36,10 +37,10 @@ WizardStyle=modern
 CloseApplications=no
 
 [Languages]
-Name: "polish"; MessagesFile: "compiler:Languages\Polish.isl"
+Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "autostart"; Description: "Uruchamiaj wskaźniki baterii razem z Windows"
+Name: "autostart"; Description: "Start JuiceBar with Windows"
 
 [Files]
 Source: "{#Root}\WirelessBattery.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -55,7 +56,7 @@ Type: files; Name: "{autoprograms}\Wireless Battery (Razer + Logitech).lnk"
 Name: "{autoprograms}\{#AppTitle}"; Filename: "{app}\WirelessBattery.exe"
 
 [Run]
-Filename: "{app}\WirelessBattery.exe"; Description: "Uruchom teraz"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\WirelessBattery.exe"; Description: "Run JuiceBar now"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 Filename: "{app}\WirelessBattery.exe"; Parameters: "--quit"; Flags: runhidden waituntilterminated; RunOnceId: "QuitApp"

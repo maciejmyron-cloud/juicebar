@@ -1,4 +1,4 @@
-# Builds dist\WirelessBattery-Setup-<version>.exe and dist\WirelessBattery-<version>-portable.zip.
+# Builds dist\JuiceBar-Setup-<version>.exe and dist\JuiceBar-<version>-portable.zip.
 # Needs: WirelessBattery.exe already built (make / build.bat) and Inno Setup 6 or 7 installed.
 param([string]$Version = "1.0.0")
 $ErrorActionPreference = "Stop"
@@ -37,5 +37,5 @@ Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force $stage | Out-Null
 Copy-Item WirelessBattery.exe, $hscExe, installer\THIRD_PARTY_NOTICES.txt $stage
 Copy-Item LICENSE (Join-Path $stage "LICENSE.txt")
-Compress-Archive -Path "$stage\*" -DestinationPath "dist\WirelessBattery-$Version-portable.zip" -Force
-Write-Host "Done: dist\WirelessBattery-Setup-$Version.exe and dist\WirelessBattery-$Version-portable.zip"
+Compress-Archive -Path "$stage\*" -DestinationPath "dist\JuiceBar-$Version-portable.zip" -Force
+Write-Host "Done: dist\JuiceBar-Setup-$Version.exe and dist\JuiceBar-$Version-portable.zip"

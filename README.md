@@ -1,9 +1,11 @@
-# Wireless Battery: brand colors edition
+# JuiceBar
 
 Battery levels of your wireless mouse, keyboard, headset and controller, right on the Windows taskbar,
 each one in its maker's color: **Razer** green, **Logitech** blue, **SteelSeries** orange, **Corsair** yellow
 and 11 more brands. Branded devices get a soft glow and a thin level bar under the percentage, like Razer Synapse
 or Logitech G HUB. Everything else keeps the plain Windows look.
+
+![JuiceBar: battery levels of 15 brands, each in its own color](docs/juicebar.png)
 
 ![Taskbar: Logitech headset, mouse and keyboard in blue, Razer mouse and keyboard in green](docs/screenshot-razer-logitech.png)
 
@@ -11,9 +13,9 @@ All 15 brands on a dark and a light taskbar (top: taskbar widget, below: tray ic
 
 ![Brand colors of all 15 brands on a dark and a light taskbar](docs/brand-colors.png)
 
-This is a fork of [Wireless-Device-Battery-Monitor](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor)
-by krisgfx9 (version 1.0.5, GPL-3). All device support comes from the original. This fork changes the look
-and fixes a few things.
+JuiceBar is a fork of [Wireless Battery](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor)
+(Wireless-Device-Battery-Monitor) by krisgfx9, version 1.0.5, GPL-3. All device support comes from the original.
+JuiceBar changes the look and fixes a few things.
 
 ## Brands
 
@@ -45,17 +47,19 @@ Colors and rules live in one file, [`src/brands.cpp`](src/brands.cpp). Adding a 
 
 ## Download and install
 
-1. Open **[Releases](../../releases/latest)** and download `WirelessBattery-Setup-….exe`.
+1. Open **[Releases](../../releases/latest)** and download `JuiceBar-Setup-….exe`.
 2. Run it and click Next. No administrator rights and no other software needed. Setup can turn on
    "start with Windows" for you.
 
-Prefer no installer? Download `WirelessBattery-…-portable.zip`, unzip anywhere and run `WirelessBattery.exe`.
+Prefer no installer? Download `JuiceBar-…-portable.zip`, unzip anywhere and run `WirelessBattery.exe`
+(the program file keeps the original app's name).
 
 **"Windows protected your PC" warning:** the app has no paid code-signing certificate, so Windows doesn't know it yet.
 Click *More info → Run anyway*. The files are built by GitHub Actions from the code in this repo (see the *Actions* tab).
 Nobody uploads them by hand.
 
-**Language:** menus, tooltips and the installer are in Polish in this fork. The original app is in English.
+Already using the original Wireless Battery? Exit it and uninstall it first: both apps share the same settings and
+startup entry, and only one of them can run at a time.
 
 ## Usage
 
@@ -76,7 +80,6 @@ Nobody uploads them by hand.
   taskbar when Windows lists the unused connection first.
 - **Sleeping Razer mice stay on the taskbar**, dimmed, with their last reading. In the original they disappeared and
   came back up to a minute after waking.
-- **Polish interface** (menus, tooltips, low battery notification, installer).
 - **Command line:** `--demo` shows sample Razer and Logitech devices, `--demo=all` one device of every brand (for
   screenshots or checking colors without the hardware). `--preview file.bmp` draws every brand on a dark and a light
   taskbar into one image. `--list` prints the devices it finds with the detected brand.

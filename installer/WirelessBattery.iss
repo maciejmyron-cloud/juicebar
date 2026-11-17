@@ -1,4 +1,5 @@
-; Inno Setup script for Wireless Battery (https://jrsoftware.org/isinfo.php).
+﻿; Inno Setup script for Wireless Battery (Razer + Logitech). Saved as UTF-8 with BOM: Inno Setup needs the BOM to read the Polish text.
+; Inno Setup: https://jrsoftware.org/isinfo.php. Based on github.com/krisgfx9/Wireless-Device-Battery-Monitor.
 ; Per-user install by default: no administrator rights needed, installs to %LOCALAPPDATA%\Programs.
 ; Setup also offers "Install for all users" (Program Files, needs administrator rights).
 ; Build with installer\build-installer.ps1 (or: ISCC /DAppVersion=1.2.3 installer\WirelessBattery.iss).
@@ -9,12 +10,12 @@
 #define Root ".."
 
 [Setup]
-AppId={{7E0B5C2A-3F4D-4C8E-9B61-2D5A8F1C4E93}
-AppName=Wireless Battery
+AppId={{E33CB974-CD17-4C2D-84EF-13A2E175D8F0}
+AppName=Wireless Battery (Razer + Logitech)
 AppVersion={#AppVersion}
-AppVerName=Wireless Battery {#AppVersion}
-AppPublisher=Wireless Battery contributors
-DefaultDirName={autopf}\Wireless Battery
+AppVerName=Wireless Battery (Razer + Logitech) {#AppVersion}
+AppPublisher=Wireless Battery contributors (fork: maciejmyron-cloud)
+DefaultDirName={autopf}\Wireless Battery RL
 DisableProgramGroupPage=yes
 DisableDirPage=auto
 PrivilegesRequired=lowest
@@ -26,14 +27,17 @@ OutputDir={#Root}\dist
 OutputBaseFilename=WirelessBattery-Setup-{#AppVersion}
 SetupIconFile={#Root}\res\app.ico
 UninstallDisplayIcon={app}\WirelessBattery.exe
-UninstallDisplayName=Wireless Battery
+UninstallDisplayName=Wireless Battery (Razer + Logitech)
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
 CloseApplications=no
 
+[Languages]
+Name: "polish"; MessagesFile: "compiler:Languages\Polish.isl"
+
 [Tasks]
-Name: "autostart"; Description: "Start Wireless Battery when I sign in to Windows"
+Name: "autostart"; Description: "Uruchamiaj wskaźniki baterii razem z Windows"
 
 [Files]
 Source: "{#Root}\WirelessBattery.exe"; DestDir: "{app}"; Flags: ignoreversion
@@ -42,10 +46,10 @@ Source: "{#Root}\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ign
 Source: "{#Root}\installer\THIRD_PARTY_NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\Wireless Battery"; Filename: "{app}\WirelessBattery.exe"
+Name: "{autoprograms}\Wireless Battery (Razer + Logitech)"; Filename: "{app}\WirelessBattery.exe"
 
 [Run]
-Filename: "{app}\WirelessBattery.exe"; Description: "Start Wireless Battery now"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\WirelessBattery.exe"; Description: "Uruchom teraz"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 Filename: "{app}\WirelessBattery.exe"; Parameters: "--quit"; Flags: runhidden waituntilterminated; RunOnceId: "QuitApp"

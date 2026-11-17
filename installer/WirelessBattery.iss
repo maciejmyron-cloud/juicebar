@@ -1,4 +1,4 @@
-﻿; Inno Setup script for Wireless Battery (Razer + Logitech). Saved as UTF-8 with BOM: Inno Setup needs the BOM to read the Polish text.
+﻿; Inno Setup script for Wireless Battery (kolory marek). Saved as UTF-8 with BOM: Inno Setup needs the BOM to read the Polish text.
 ; Inno Setup: https://jrsoftware.org/isinfo.php. Based on github.com/krisgfx9/Wireless-Device-Battery-Monitor.
 ; Per-user install by default: no administrator rights needed, installs to %LOCALAPPDATA%\Programs.
 ; Setup also offers "Install for all users" (Program Files, needs administrator rights).
@@ -8,12 +8,14 @@
   #define AppVersion "1.0.0"
 #endif
 #define Root ".."
+; Was "Wireless Battery (Razer + Logitech)" up to 1.0.5-rl.1; same AppId, so it upgrades in place.
+#define AppTitle "Wireless Battery (kolory marek)"
 
 [Setup]
 AppId={{E33CB974-CD17-4C2D-84EF-13A2E175D8F0}
-AppName=Wireless Battery (Razer + Logitech)
+AppName={#AppTitle}
 AppVersion={#AppVersion}
-AppVerName=Wireless Battery (Razer + Logitech) {#AppVersion}
+AppVerName={#AppTitle} {#AppVersion}
 AppPublisher=Wireless Battery contributors (fork: maciejmyron-cloud)
 DefaultDirName={autopf}\Wireless Battery RL
 DisableProgramGroupPage=yes
@@ -27,7 +29,7 @@ OutputDir={#Root}\dist
 OutputBaseFilename=WirelessBattery-Setup-{#AppVersion}
 SetupIconFile={#Root}\res\app.ico
 UninstallDisplayIcon={app}\WirelessBattery.exe
-UninstallDisplayName=Wireless Battery (Razer + Logitech)
+UninstallDisplayName={#AppTitle}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
@@ -45,8 +47,12 @@ Source: "{#Root}\third_party\headsetcontrol\headsetcontrol.exe"; DestDir: "{app}
 Source: "{#Root}\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 Source: "{#Root}\installer\THIRD_PARTY_NOTICES.txt"; DestDir: "{app}"; Flags: ignoreversion
 
+[InstallDelete]
+; Start menu shortcut under the old name (1.0.5-rl.1).
+Type: files; Name: "{autoprograms}\Wireless Battery (Razer + Logitech).lnk"
+
 [Icons]
-Name: "{autoprograms}\Wireless Battery (Razer + Logitech)"; Filename: "{app}\WirelessBattery.exe"
+Name: "{autoprograms}\{#AppTitle}"; Filename: "{app}\WirelessBattery.exe"
 
 [Run]
 Filename: "{app}\WirelessBattery.exe"; Description: "Uruchom teraz"; Flags: nowait postinstall skipifsilent

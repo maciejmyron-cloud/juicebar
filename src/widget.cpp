@@ -18,7 +18,10 @@ SIZE g_size{};
 
 const wchar_t* kClass = L"WirelessBatteryWidget";
 
+int g_previewDpi;  // set while RenderStrip draws without a taskbar
+
 int Dpi() {
+    if (g_previewDpi) return g_previewDpi;
     UINT d = g_taskbar ? GetDpiForWindow(g_taskbar) : 0;
     return d ? (int)d : 96;
 }
@@ -250,8 +253,6 @@ std::vector<Piece> Layout(int& width) {
     Rgb fg = g_light ? Rgb{ 0, 0, 0 } : Rgb{ 255, 255, 255 };
     Rgb red = g_light ? Rgb{ 196, 30, 40 } : Rgb{ 255, 90, 90 };
     Rgb charge = g_light ? Rgb{ 0, 120, 212 } : Rgb{ 96, 205, 255 };
-    Rgb razer = g_light ? Rgb{ 22, 140, 20 } : Rgb{ 68, 214, 44 };  // Razer green #44D62C
-    Rgb logi = g_light ? Rgb{ 0, 120, 180 } : Rgb{ 0, 184, 252 };   // Logitech G blue #00B8FC
     HFONT icons = MakeFont(Px(16), FW_NORMAL, L"Segoe Fluent Icons", L"Segoe MDL2 Assets");
     HFONT bolt = MakeFont(Px(11), FW_NORMAL, L"Segoe Fluent Icons", L"Segoe MDL2 Assets");
     HFONT text = MakeFont(Px(13), FW_NORMAL, L"Segoe UI Variable Text", L"Segoe UI");
@@ -263,7 +264,8 @@ std::vector<Piece> Layout(int& width) {
         int a = it.dim ? 120 : 255;
         Rgb tc = it.low ? red : fg;
         bool branded = it.accent != Accent::None;
-        Rgb accent = it.accent == Accent::Razer ? razer : logi;
+        BrandColor bc = AccentColor(it.accent, g_light);
+        Rgb accent{ bc.r, bc.g, bc.b };
         Piece icon{ RenderMask(std::wstring(1, Glyph(it.kind, it.bluetooth)), icons), branded ? accent : fg, a, Px(5) };
         if (branded && !it.dim) {
             icon.haloR = Px(3);
@@ -288,6 +290,28 @@ std::vector<Piece> Layout(int& width) {
     width = Px(8) * 2;
     for (auto& p : out) width += p.m.w + p.gapAfter;
     return out;
+}
+
+void DrawPieces(Canvas& cv, const std::vector<Piece>& pieces) {
+    const int H = cv.h;
+    int x = Px(8);
+    Rgb track = g_light ? Rgb{ 0, 0, 0 } : Rgb{ 255, 255, 255 };
+    for (auto& p : pieces) {
+        int y = (H - p.m.h) / 2;
+        if (p.haloR) cv.Draw(p.halo, x - p.haloR, y - p.haloR, p.color, p.haloAlpha * p.alpha / 255);
+        if (p.barPct >= 0) {
+            // Text and bar are centred together; the bar spans the text's width, like Synapse's battery bar.
+            int bh = std::max(2, Px(2)), gap = Px(3);
+            y = (H - (p.m.h + gap + bh)) / 2;
+            int by = y + p.m.h + gap;
+            int fill = std::max(p.barPct > 0 ? 1 : 0, (p.barPct * p.m.w + 50) / 100);
+            for (int yy = by; yy < by + bh; yy++)
+                for (int xx = 0; xx < p.m.w; xx++)
+                    cv.Blend(x + xx, yy, xx < fill ? p.barColor : track, xx < fill ? p.alpha : 45 * p.alpha / 255);
+        }
+        cv.Draw(p.m, x, y, p.color, p.alpha);
+        x += p.m.w + p.gapAfter;
+    }
 }
 
 void Paint() {
@@ -315,25 +339,7 @@ void Paint() {
     // (e.g. Windhawk's Taskbar Styler) makes the bar transparent over the wallpaper.
     if (g_background) roundRect(Px(4), Px(6), g_light ? Rgb{ 243, 243, 243 } : Rgb{ 32, 32, 32 }, 240);
     if (g_hover) roundRect(Px(4), Px(4), g_light ? Rgb{ 0, 0, 0 } : Rgb{ 255, 255, 255 }, g_light ? 20 : 26);
-
-    int x = Px(8);
-    Rgb track = g_light ? Rgb{ 0, 0, 0 } : Rgb{ 255, 255, 255 };
-    for (auto& p : pieces) {
-        int y = (H - p.m.h) / 2;
-        if (p.haloR) cv.Draw(p.halo, x - p.haloR, y - p.haloR, p.color, p.haloAlpha * p.alpha / 255);
-        if (p.barPct >= 0) {
-            // Text and bar are centred together; the bar spans the text's width, like Synapse's battery bar.
-            int bh = std::max(2, Px(2)), gap = Px(3);
-            y = (H - (p.m.h + gap + bh)) / 2;
-            int by = y + p.m.h + gap;
-            int fill = std::max(p.barPct > 0 ? 1 : 0, (p.barPct * p.m.w + 50) / 100);
-            for (int yy = by; yy < by + bh; yy++)
-                for (int xx = 0; xx < p.m.w; xx++)
-                    cv.Blend(x + xx, yy, xx < fill ? p.barColor : track, xx < fill ? p.alpha : 45 * p.alpha / 255);
-        }
-        cv.Draw(p.m, x, y, p.color, p.alpha);
-        x += p.m.w + p.gapAfter;
-    }
+    DrawPieces(cv, pieces);
 
     HDC screen = GetDC(nullptr);
     HDC mem = CreateCompatibleDC(screen);
@@ -537,6 +543,25 @@ bool Reposition() {
     g_lastLeft = left;
     SetWindowPos(g_wnd, HWND_TOP, left, 0, g_size.cx, g_size.cy, SWP_NOACTIVATE | SWP_SHOWWINDOW);
     return true;
+}
+
+std::vector<DWORD> RenderStrip(const std::vector<WidgetItem>& items, bool light, int dpi, int height, int& width) {
+    auto savedItems = g_items;
+    bool savedLight = g_light;
+    g_items = items;
+    g_light = light;
+    g_previewDpi = dpi;
+    int W = 0;
+    auto pieces = Layout(W);
+    Canvas cv(W, height);
+    DWORD bg = light ? 0xFFF3F3F3 : 0xFF202020;  // Windows 11 taskbar, light / dark
+    for (auto& p : cv.px) p = bg;
+    DrawPieces(cv, pieces);
+    g_previewDpi = 0;
+    g_items = savedItems;
+    g_light = savedLight;
+    width = W;
+    return cv.px;
 }
 
 }  // namespace widget

@@ -1,10 +1,37 @@
-# Wireless Battery: edycja Razer + Logitech
+# Wireless Battery: edycja z kolorami marek
 
-Pokazuje na pasku zadań Windows, ile baterii zostało w bezprzewodowej myszce, klawiaturze i słuchawkach.
-Sprzęt **Razera** dostaje zieloną ikonę, a sprzęt **Logitecha** jasnoniebieską. Oba mają delikatną poświatę
-i cienki pasek poziomu pod procentami. Pozostałe urządzenia wyglądają zwyczajnie.
+Pokazuje na pasku zadań Windows, ile baterii zostało w bezprzewodowej myszce, klawiaturze, słuchawkach i padzie.
+Sprzęt znanych marek dostaje ikonę w kolorze producenta: **Razer** na zielono, **Logitech** na jasnoniebiesko,
+**SteelSeries** na pomarańczowo, **Corsair** na żółto i tak dalej (15 marek, tabela niżej). Kolorowe urządzenia mają
+delikatną poświatę i cienki pasek poziomu pod procentami. Pozostałe wyglądają zwyczajnie.
 
 ![Pasek zadań: słuchawki, myszka i klawiatura Logitech na niebiesko, myszka i klawiatura Razer na zielono](docs/screenshot-razer-logitech.png)
+
+Wszystkie marki na ciemnym i jasnym pasku (u góry widżet na pasku, pod nim tryb ikon w zasobniku):
+
+![Kolory wszystkich marek na ciemnym i jasnym pasku zadań](docs/kolory-marek.png)
+
+| Marka | Kolor | Rozpoznawana po |
+| --- | --- | --- |
+| Razer | zielony `#44D62C` | odbiorniki i Bluetooth Razera, słuchawki BlackShark / Barracuda, nazwa „Razer …” |
+| Logitech | jasnoniebieski `#00B8FC` | Unifying, Bolt, Lightspeed, Bluetooth, nazwy „MX …”, „G915”, „K380” |
+| SteelSeries | pomarańczowy `#FF5200` | odbiorniki SteelSeries, nazwy „Arctis”, „Aerox”, „Rival” |
+| Corsair | żółty `#F5E41A` | odbiorniki Corsair (Slipstream), słuchawki przez HeadsetControl |
+| HyperX | czerwony `#E31837` | odbiorniki HyperX, nazwa „HyperX …”, „Pulsefire” |
+| ASUS ROG | czerwony `#FF0029` | odbiorniki ROG, nazwa „ROG …” |
+| ZOWIE | czerwony `#E2231A` | odbiorniki ZOWIE |
+| PlayStation | niebieski `#0070D1` | DualSense, DualShock 4, słuchawki INZONE |
+| Xbox | zielony `#107C10` | pady i słuchawki Xbox |
+| Samsung | niebieski `#1428A0` | Galaxy Buds, telefon Galaxy (Phone Link) |
+| Apple | srebrny | AirPods, Magic Mouse / Keyboard / Trackpad |
+| Jabra | żółty `#FFC800` | odbiornik Jabra Link, nazwa „Jabra …” |
+| JBL | pomarańczowoczerwony `#FF3D00` | słuchawki JBL Quantum, nazwa „JBL …” |
+| Cooler Master | fioletowy | myszy Cooler Master |
+| Steam | niebieski `#1A9FFF` | Steam Controller |
+
+Ciemne kolory (Xbox, PlayStation, Samsung) są na ciemnym pasku rozjaśnione, a jasne (żółte, srebrny) na jasnym
+pasku przyciemnione, żeby zawsze było je widać. Słuchawki Sony z serii WH- / WF-, myszy HP i Microsoft Surface
+mają ten sam numer producenta co PlayStation, HyperX i Xbox, ale nie dostają ich koloru.
 
 To przeróbka programu [Wireless-Device-Battery-Monitor](https://github.com/krisgfx9/Wireless-Device-Battery-Monitor)
 (autor: krisgfx9, wersja 1.0.5, licencja GPL-3). Cała obsługa urządzeń pochodzi z oryginału,
@@ -33,15 +60,16 @@ z kodu widocznego w tym repo (zakładka *Actions*), nikt nie wgrywa go ręcznie.
 
 ## Co się różni od oryginału
 
-- **Kolory producenta:** Razer `#44D62C`, Logitech G `#00B8FC`. Marka jest rozpoznawana po numerze producenta
-  urządzenia (USB/Bluetooth), a jeśli go nie ma, po nazwie (np. „MX Master 3S”, „G915”, „Razer …”).
+- **Kolory producenta** dla 15 marek (tabela wyżej). Marka jest rozpoznawana kolejno po sterowniku, który znalazł
+  urządzenie, po numerze producenta (USB/Bluetooth) i po nazwie. Kolory i reguły są w jednym pliku: `src/brands.cpp`.
   W trybie ikon w zasobniku kolor marki ma pasek pod liczbą.
 - **Menu i podpowiedzi po polsku.**
 - **Ładniejsze nazwy:** „DSV2 Pro” to „Razer DeathStalker V2 Pro”. Znika też przedrostek „LE-” z nazw słuchawek Bluetooth.
 - **Poprawka Bluetooth:** słuchawki z dwoma rodzajami połączenia (klasyczny Bluetooth i LE Audio, np. Bose QC Ultra)
   nie znikają już z paska, gdy Windows wyliczy najpierw nieużywane połączenie.
-- **`WirelessBattery.exe --demo`:** pokazuje przykładowe urządzenia obu marek (do zrzutów ekranu i sprawdzenia kolorów
-  bez sprzętu). `--list` wypisuje urządzenia razem z rozpoznaną marką.
+- **`WirelessBattery.exe --demo`:** pokazuje przykładowe urządzenia Razer i Logitech, a `--demo=all` po jednym
+  urządzeniu każdej marki (do zrzutów ekranu i sprawdzenia kolorów bez sprzętu). `--preview plik.bmp` rysuje
+  wszystkie marki na ciemnym i jasnym pasku do pliku. `--list` wypisuje urządzenia razem z rozpoznaną marką.
 
 ## Obsługiwany sprzęt
 
@@ -76,4 +104,5 @@ Wypchnięcie tagu `v…` buduje i publikuje wydanie automatycznie (GitHub Action
 są w [opisie oryginału](docs/ORIGINAL-README.md#credits)). Do instalatora dołączony jest
 [HeadsetControl](https://github.com/Sapd/HeadsetControl) (GPL-3).
 
-Razer i Logitech to znaki towarowe swoich właścicieli. Ten projekt nie jest z nimi związany.
+Nazwy marek z tabeli to znaki towarowe ich właścicieli. Ten projekt nie jest z nimi związany, a kolory służą tylko
+do rozpoznania sprzętu na pasku.

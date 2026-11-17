@@ -4,11 +4,8 @@
 #include <windows.h>
 #include <string>
 #include <vector>
+#include "brands.h"
 #include "devices.h"
-
-// Brand look for a device: icon in the brand colour with a soft glow, and a thin level bar under
-// the percentage (like Razer Synapse / Logitech G HUB). None keeps the plain system look.
-enum class Accent { None, Razer, Logitech };
 
 struct WidgetItem {
     DeviceKind kind = DeviceKind::Other;
@@ -33,4 +30,7 @@ void SetBackground(bool on);
 // Re-checks the taskbar layout and moves the widget if needed; call about once a second.
 // Returns false when the taskbar it was attached to is gone.
 bool Reposition();
+// Draws `items` the way the widget would, on an opaque taskbar-coloured strip `height` pixels tall,
+// at the given DPI (for --preview: checking the colours on both themes). Returns BGRA pixels.
+std::vector<DWORD> RenderStrip(const std::vector<WidgetItem>& items, bool light, int dpi, int height, int& width);
 }

@@ -256,13 +256,17 @@ HICON RenderIcon(const std::wstring& text, int barPct, Rgb textColor, Rgb barCol
 
 Rgb Foreground() { return g_lightTaskbar ? Rgb{ 0, 0, 0 } : Rgb{ 255, 255, 255 }; }
 
+Rgb BrandRgb(Accent a) {
+    BrandColor c = AccentColor(a, g_lightTaskbar);
+    return Rgb{ c.r, c.g, c.b };
+}
+
 HICON IconFor(int pct, bool charging, bool dim, Accent accent) {
     Rgb fg = Foreground();
     Rgb bar = charging        ? Rgb{ 0, 170, 255 }
             : pct <= LOW_BATTERY ? Rgb{ 232, 32, 48 }
             : pct <= 30       ? Rgb{ 255, 150, 0 }
-            : accent == Accent::Razer    ? Rgb{ 68, 214, 44 }   // Razer green #44D62C
-            : accent == Accent::Logitech ? Rgb{ 0, 184, 252 }   // Logitech G blue #00B8FC
+            : accent != Accent::None ? BrandRgb(accent)
                               : Rgb{ 30, 190, 90 };
     Rgb text = (!charging && pct >= 0 && pct <= LOW_BATTERY) ? Rgb{ 240, 50, 60 } : fg;
     std::wstring t = pct < 0 ? L"?" : std::to_wstring(pct);
@@ -290,40 +294,11 @@ std::wstring StatusText(const TrayEntry& e) {
     return t;
 }
 
-// ---- brand touches (Razer green, Logitech blue) -----------------------------------------------
+// ---- names (brand colours are in brands.cpp) ---------------------------------------------------
 
 std::wstring Lower(std::wstring s) {
     for (auto& c : s) c = towlower(c);
     return s;
-}
-
-bool StartsWith(const std::wstring& s, const wchar_t* p) { return s.rfind(p, 0) == 0; }
-
-bool IsRazer(const DeviceStatus& s) {
-    // 1532: Razer over USB and its receivers. 068E: the id Razer keyboards report over Bluetooth LE
-    // (seen on the DeathStalker V2 Pro; Razer's own driver lists it as RZCONTROL\VID_068E).
-    if (s.vid == 0x1532 || s.vid == 0x068E) return true;
-    for (const wchar_t* k : { L"razer:", L"blackshark:", L"barracuda:" })
-        if (StartsWith(s.key, k)) return true;
-    return Lower(s.name).find(L"razer") != std::wstring::npos;
-}
-
-bool IsLogitech(const DeviceStatus& s) {
-    if (s.vid == 0x046D || StartsWith(s.key, L"logi:") || StartsWith(s.key, L"g435:")) return true;
-    std::wstring n = Lower(s.name);
-    if (n.find(L"logitech") != std::wstring::npos || StartsWith(n, L"logi ")) return true;
-    // Bluetooth names often leave the brand out: "MX Master 3S", "MX Keys S", "LIFT", "POP Mouse", "Pebble M350".
-    for (const wchar_t* p : { L"mx ", L"lift", L"pop mouse", L"pop keys", L"pebble", L"ergo k", L"ergo m" })
-        if (StartsWith(n, p)) return true;
-    // ... or are just a model number: "K380", "M720 Triathlon", "G915", "G502 X".
-    return n.size() >= 4 && (n[0] == L'g' || n[0] == L'k' || n[0] == L'm') && iswdigit(n[1]) && iswdigit(n[2]) &&
-           iswdigit(n[3]) && (n.size() == 4 || !iswalnum(n[4]));
-}
-
-Accent BrandOf(const DeviceStatus& s) {
-    if (IsRazer(s)) return Accent::Razer;
-    if (IsLogitech(s)) return Accent::Logitech;
-    return Accent::None;
 }
 
 // Friendlier names and a reliable mouse / keyboard icon for Razer gear on Bluetooth, whose
@@ -338,7 +313,7 @@ void Polish(DeviceStatus& s) {
     };
     for (auto& [from, to] : kNames)
         if (s.name == from) s.name = to;
-    if (!IsRazer(s)) return;
+    if (BrandOf(s) != Accent::Razer) return;
     std::wstring n = Lower(s.name);
     auto has = [&](const wchar_t* w) { return n.find(w) != std::wstring::npos; };
     if (has(L"deathstalker") || has(L"blackwidow") || has(L"huntsman") || has(L"ornata") || has(L"cynosa") ||
@@ -607,9 +582,45 @@ void ShowMenu() {
 
 // `--demo`: sample Razer and Logitech devices instead of real ones (screenshots, checking the colours
 // without the hardware). "G915 TKL" has no vendor id on purpose: it exercises the name-based match.
+// `--demo=all`: one device of every brand with its own colour, plus one without (Bose).
 bool g_demo = false;
+bool g_demoAll = false;
+
+std::vector<DeviceStatus> DemoAllBrands() {
+    auto make = [](const wchar_t* key, const wchar_t* name, DeviceKind kind, int pct, unsigned short vid, bool charging) {
+        DeviceStatus s;
+        s.key = key;
+        s.name = name;
+        s.kind = kind;
+        s.percent = pct;
+        s.vid = vid;
+        s.charging = charging;
+        s.via = L"demo";
+        return s;
+    };
+    // Keys, vendor ids and names mixed on purpose, so every way of recognising a brand gets used.
+    return {
+        make(L"razer:demo", L"Razer DeathAdder V3 Pro", DeviceKind::Mouse, 78, 0x1532, false),
+        make(L"demo:logi", L"Logitech G PRO X 2 LIGHTSPEED", DeviceKind::Headset, 64, 0x046D, false),
+        make(L"steelseries:demo", L"SteelSeries Arctis Nova 7", DeviceKind::Headset, 55, 0, false),
+        make(L"hsc:1b1c:0a6b", L"Corsair HS80 RGB Wireless", DeviceKind::Headset, 81, 0x1B1C, false),
+        make(L"hyperx:demo", L"HyperX Cloud III Wireless", DeviceKind::Headset, 47, 0, false),
+        make(L"rog:demo", L"ROG Harpe Ace", DeviceKind::Mouse, 90, 0, false),
+        make(L"zowie:demo", L"ZOWIE EC2-CW", DeviceKind::Mouse, 66, 0x04A5, false),
+        make(L"bt:demo-ps", L"Wireless Controller", DeviceKind::Gamepad, 38, 0x054C, false),
+        make(L"xbox:demo", L"Xbox Wireless Controller", DeviceKind::Gamepad, 72, 0x045E, false),
+        make(L"bt:demo-buds", L"Galaxy Buds3 Pro", DeviceKind::Headset, 59, 0, false),
+        make(L"airpods:demo", L"AirPods Pro", DeviceKind::Headset, 85, 0, false),
+        make(L"jabra:demo", L"Jabra Evolve2 65", DeviceKind::Headset, 23, 0x0B0E, false),
+        make(L"jbl:demo", L"JBL Quantum 910", DeviceKind::Headset, 70, 0x0ECB, false),
+        make(L"coolermaster:demo", L"Cooler Master MM712", DeviceKind::Mouse, 12, 0x2516, false),
+        make(L"steam:demo", L"Steam Controller", DeviceKind::Gamepad, 50, 0x28DE, true),
+        make(L"bt:demo-bose", L"Bose QC Ultra Headphones", DeviceKind::Headset, 100, 0, false),
+    };
+}
 
 std::vector<DeviceStatus> DemoDevices() {
+    if (g_demoAll) return DemoAllBrands();
     auto make = [](const wchar_t* key, const wchar_t* name, DeviceKind kind, int pct, unsigned short vid, bool charging) {
         DeviceStatus s;
         s.key = key;
@@ -724,7 +735,7 @@ int ListToConsole(bool dump) {
         Polish(s);
         Accent accent = BrandOf(s);
         std::wstring line = s.name + L"  [" + s.via + L"]  " +
-                            (accent == Accent::Razer ? L"{Razer}  " : accent == Accent::Logitech ? L"{Logitech}  " : L"");
+                            (accent != Accent::None ? L"{" + std::wstring(StyleOf(accent).name) + L"}  " : L"");
         if (!s.connected) line += L"off / not connected";
         else if (s.asleep) line += L"asleep";
         else if (!s.levelText.empty()) line += s.levelText;
@@ -736,6 +747,85 @@ int ListToConsole(bool dump) {
         write(line + L"   (" + s.key + L")\n");
     }
     return 0;
+}
+
+// `--preview <file.bmp>`: every brand drawn the way the taskbar widget and the tray icons draw it, on a
+// dark and on a light taskbar, in one picture. For checking colours and contrast without switching the
+// Windows theme or owning the hardware.
+int Preview(const std::wstring& path) {
+    const int dpi = 144;  // 150 %
+    const int rowH = MulDiv(48, dpi, 96);
+    auto devices = DemoAllBrands();
+    std::vector<WidgetItem> items;
+    for (auto& s : devices) {
+        Polish(s);
+        WidgetItem it;
+        it.kind = s.kind;
+        it.percent = s.percent;
+        it.charging = s.charging;
+        it.low = !s.charging && s.percent >= 0 && s.percent <= LOW_BATTERY;
+        it.accent = BrandOf(s);
+        items.push_back(it);
+    }
+    int wDark = 0, wLight = 0;
+    auto dark = widget::RenderStrip(items, false, dpi, rowH, wDark);
+    auto light = widget::RenderStrip(items, true, dpi, rowH, wLight);
+
+    const int W = std::max(wDark, wLight), H = rowH * 4;  // widget dark, icons dark, widget light, icons light
+    HDC dc = CreateCompatibleDC(nullptr);
+    BITMAPINFO bi{};
+    bi.bmiHeader = { sizeof(BITMAPINFOHEADER), W, -H, 1, 32, BI_RGB };
+    void* bits = nullptr;
+    HBITMAP bmp = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    if (!bmp) { DeleteDC(dc); return 1; }
+    HGDIOBJ old = SelectObject(dc, bmp);
+    auto* px = static_cast<DWORD*>(bits);
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++) px[y * W + x] = (y / rowH) < 2 ? 0xFF202020 : 0xFFF3F3F3;
+    auto blit = [&](const std::vector<DWORD>& src, int sw, int row) {
+        for (int y = 0; y < rowH; y++) memcpy(px + (row * rowH + y) * W, src.data() + y * sw, (size_t)sw * 4);
+    };
+    blit(dark, wDark, 0);
+    blit(light, wLight, 2);
+    bool savedLight = g_lightTaskbar;
+    for (int pass = 0; pass < 2; pass++) {
+        g_lightTaskbar = pass == 1;
+        int x = MulDiv(8, dpi, 96);
+        for (size_t i = 0; i < devices.size(); i++) {
+            HICON icon = IconFor(devices[i].percent, devices[i].charging, false, items[i].accent);
+            ICONINFO ii{};
+            BITMAP b{};
+            GetIconInfo(icon, &ii);
+            GetObject(ii.hbmColor, sizeof(b), &b);
+            if (ii.hbmColor) DeleteObject(ii.hbmColor);
+            if (ii.hbmMask) DeleteObject(ii.hbmMask);
+            int row = pass == 0 ? 1 : 3;
+            DrawIconEx(dc, x, row * rowH + (rowH - b.bmHeight) / 2, icon, 0, 0, 0, nullptr, DI_NORMAL);
+            DestroyIcon(icon);
+            x += b.bmWidth + MulDiv(10, dpi, 96);
+        }
+    }
+    g_lightTaskbar = savedLight;
+    GdiFlush();
+
+    // Bottom-up 32-bit BMP: the most widely readable variant.
+    BITMAPFILEHEADER fh{};
+    BITMAPINFOHEADER ih{ sizeof(ih), W, H, 1, 32, BI_RGB };
+    fh.bfType = 0x4D42;
+    fh.bfOffBits = sizeof(fh) + sizeof(ih);
+    fh.bfSize = fh.bfOffBits + (DWORD)W * H * 4;
+    bool ok = false;
+    HANDLE f = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, 0, nullptr);
+    if (f != INVALID_HANDLE_VALUE) {
+        DWORD w;
+        ok = WriteFile(f, &fh, sizeof(fh), &w, nullptr) && WriteFile(f, &ih, sizeof(ih), &w, nullptr);
+        for (int y = H - 1; ok && y >= 0; y--) ok = WriteFile(f, px + y * W, W * 4, &w, nullptr);
+        CloseHandle(f);
+    }
+    SelectObject(dc, old);
+    DeleteObject(bmp);
+    DeleteDC(dc);
+    return ok ? 0 : 1;
 }
 
 }  // namespace
@@ -750,8 +840,16 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
         }
         return 0;
     }
+    if (const wchar_t* p = cmdLine ? wcsstr(cmdLine, L"--preview") : nullptr) {
+        std::wstring path = p + 9;
+        path.erase(0, path.find_first_not_of(L" \""));
+        if (size_t q = path.find(L'"'); q != std::wstring::npos) path.erase(q);
+        while (!path.empty() && path.back() == L' ') path.pop_back();
+        return Preview(path.empty() ? L"preview.bmp" : path);
+    }
     g_inst = inst;
     g_demo = cmdLine && wcsstr(cmdLine, L"--demo");
+    g_demoAll = cmdLine && wcsstr(cmdLine, L"--demo=all");
 
     HANDLE mutex = CreateMutexW(nullptr, TRUE, L"Local\\WirelessBatteryTray");
     if (GetLastError() == ERROR_ALREADY_EXISTS) return 0;

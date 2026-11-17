@@ -39,6 +39,8 @@ test:
 	./build/keychron_driver_test.exe
 	$(CXX) -std=c++17 -O2 -Wall tests/galaxy_buds_protocol_test.cpp -o build/galaxy_buds_protocol_test.exe
 	./build/galaxy_buds_protocol_test.exe
+	$(CXX) $(CXXFLAGS) tests/brands_test.cpp src/brands.cpp -o build/brands_test.exe
+	./build/brands_test.exe
 	$(CXX) -std=c++17 -O2 -Wall tests/logitech_g435_0adf_test.cpp -o build/logitech_g435_0adf_test.exe
 	./build/logitech_g435_0adf_test.exe
 

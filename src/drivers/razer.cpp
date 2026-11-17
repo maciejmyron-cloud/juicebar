@@ -135,8 +135,11 @@ void PollRazer(PollContext& ctx) {
             if (res != Rz::Ok && res != Rz::Offline) continue;
 
             DeviceStatus s;
-            s.key = L"razer:" + Hex4(pid);
             s.name = CleanName(HidProduct(*c));
+            // Keyed by name, not product id: a wireless mouse has one id on the cable (DeathAdder V3 Pro: 00B6)
+            // and another through its receiver (00B7). With the id in the key, plugging the cable in or out
+            // made a second icon appear while the old one lingered for the grace period.
+            s.key = L"razer:" + s.name;
             s.kind = Kind(ctx.colls, vid, pid);
             if (s.kind == DeviceKind::Other) s.kind = GuessKind(s.name);
             s.via = L"Razer receiver";
@@ -159,8 +162,19 @@ void PollRazer(PollContext& ctx) {
                 ctx.Add(s, vid, pid);
             } else {
                 ctx.Claim(vid, pid);
-                for (auto& o : ctx.out)
-                    if (o.name == s.name && s.charging) o.charging = true;
+                for (auto& o : ctx.out) {
+                    if (o.name != s.name) continue;
+                    bool charging = o.charging || s.charging;
+                    // Keep whichever link answered: while the cable is in, the receiver often reports the
+                    // mouse as offline, and right after unplugging the cable side is the stale one.
+                    if (o.percent < 0 && s.percent >= 0) {
+                        unsigned short v = o.vid;
+                        o = s;
+                        o.vid = v;
+                    }
+                    o.charging = charging;
+                    if (o.percent >= 0) o.asleep = false;
+                }
             }
             break;
         }

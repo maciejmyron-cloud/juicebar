@@ -650,7 +650,21 @@ DWORD WINAPI Worker(LPVOID) {
     }
 }
 
-void RefreshSoon(UINT ms) { SetTimer(g_hwnd, TIMER_DEBOUNCE, ms, nullptr); }
+// After a device is plugged in or out: refresh after 1 s, then again 4 s and 12 s after the change. A mouse
+// switching between cable and receiver needs a few seconds before it answers on the new link, and a single
+// refresh that came too early left the old state on screen until the next regular poll a minute later.
+constexpr UINT kFollowUpMs[] = { 1000, 3000, 8000 };
+int g_followUp = -1;  // index of the follow-up refresh now pending, -1 = none
+
+void RefreshSoon(UINT ms) {
+    g_followUp = -1;
+    SetTimer(g_hwnd, TIMER_DEBOUNCE, ms, nullptr);
+}
+
+void RefreshAfterDeviceChange() {  // several arrivals in a row restart the sequence
+    g_followUp = 0;
+    SetTimer(g_hwnd, TIMER_DEBOUNCE, kFollowUpMs[0], nullptr);
+}
 
 LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     if (msg == g_taskbarCreatedMsg && msg != 0) {  // Explorer restarted
@@ -681,13 +695,20 @@ LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             if (wp) DestroyWindow(h);
             return 0;
         case WM_DEVICECHANGE:
-            if (wp == DBT_DEVICEARRIVAL || wp == DBT_DEVICEREMOVECOMPLETE) RefreshSoon(2500);
+            if (wp == DBT_DEVICEARRIVAL || wp == DBT_DEVICEREMOVECOMPLETE) RefreshAfterDeviceChange();
             return TRUE;
         case WM_POWERBROADCAST:
             if (wp == PBT_APMRESUMEAUTOMATIC) RefreshSoon(5000);
             return TRUE;
         case WM_TIMER:
-            if (wp == TIMER_DEBOUNCE) { KillTimer(h, TIMER_DEBOUNCE); SetEvent(g_refreshEvt); }
+            if (wp == TIMER_DEBOUNCE) {
+                KillTimer(h, TIMER_DEBOUNCE);
+                SetEvent(g_refreshEvt);
+                if (g_followUp >= 0 && ++g_followUp < (int)ARRAYSIZE(kFollowUpMs))
+                    SetTimer(h, TIMER_DEBOUNCE, kFollowUpMs[g_followUp], nullptr);
+                else
+                    g_followUp = -1;
+            }
             if (wp == TIMER_WIDGET) Reconcile();
             return 0;
         case WM_SETTINGCHANGE:

@@ -8,6 +8,9 @@
 // Reference: github.com/openrazer/openrazer (protocol documentation in its driver sources).
 #include "drivers.h"
 
+#include <algorithm>
+#include <map>
+
 namespace {
 
 BYTE KeyboardBatteryTid(USHORT pid) {
@@ -24,6 +27,10 @@ BYTE KeyboardBatteryTid(USHORT pid) {
 
 enum class Rz { Ok, Offline, Unsupported, NoReply };
 
+// Transaction id that last worked per product: tried first, so a mouse that answers to the third id does not
+// cost two failed rounds every poll (each one now waits up to 400 ms).
+std::map<USHORT, BYTE> g_goodTid;
+
 Rz Command(HidDev& d, BYTE tid, BYTE cls, BYTE id, BYTE size, std::vector<BYTE>& args) {
     std::vector<BYTE> rep(91, 0);  // [0] = report id 0, then the 90-byte report
     BYTE* r = rep.data() + 1;
@@ -34,27 +41,38 @@ Rz Command(HidDev& d, BYTE tid, BYTE cls, BYTE id, BYTE size, std::vector<BYTE>&
     BYTE crc = 0;
     for (int i = 2; i < 88; i++) crc ^= r[i];
     r[88] = crc;
+    // Synapse shares this feature-report mailbox, and while a Chroma app drives the lighting (Wallpaper Engine's LED
+    // plugin, games) it writes lighting frames (class 0F) many times a second, so a reply left waiting for 15-40 ms
+    // was nearly always replaced by one of those. Read back straight away instead (a feature-report read takes about
+    // a millisecond, so this paces itself), and send again when no answer of ours shows up within a short window.
+    const bool keyboard = KeyboardBatteryTid(d.coll().pid) != 0;
+    const ULONGLONG deadline = GetTickCount64() + (keyboard ? 150 : 400);
     std::vector<BYTE> resp;
-    bool send = true;
     Rz res = Rz::NoReply;
-    for (int attempt = 0; attempt < 8; attempt++) {
-        if (send && !d.SetFeature(rep)) return Rz::NoReply;
-        // Wireless keyboards need about 5 ms (OpenRazer); a long wait lets Synapse replace the reply.
-        Sleep(KeyboardBatteryTid(d.coll().pid) ? 5 : (attempt == 0 ? 15 : 40));
-        send = true;
-        res = Rz::NoReply;
-        if (!d.GetFeature(0, resp) || resp.size() < 91) continue;
-        const BYTE* a = resp.data() + 1;
-        BYTE replyCrc = 0;
-        for (int i = 2; i < 88; i++) replyCrc ^= a[i];
-        // Synapse shares the feature-report mailbox. A different reply needs a fresh request.
-        if (a[1] != tid || a[2] || a[3] || a[4] || a[5] != size || a[6] != cls || a[7] != id ||
-            a[88] != replyCrc) continue;
-        if (a[0] == 0x01) { send = false; continue; }  // busy: wait for this request to finish
-        if (a[0] == 0x02) { args.assign(a + 8, a + 88); return Rz::Ok; }
-        if (a[0] == 0x04) { res = Rz::Offline; continue; }  // retry a transient receiver timeout
-        if (a[0] == 0x05 || a[0] == 0x03) return Rz::Unsupported;
-    }
+    int offline = 0;
+    do {
+        if (!d.SetFeature(rep)) return Rz::NoReply;
+        // Wireless keyboards answer within about 5 ms (OpenRazer); a mouse needs a round trip through its receiver.
+        const ULONGLONG window = GetTickCount64() + (keyboard ? 15 : 60);
+        bool resend = false;
+        while (!resend && GetTickCount64() < window) {
+            if (!d.GetFeature(0, resp) || resp.size() < 91) { Sleep(1); continue; }
+            const BYTE* a = resp.data() + 1;
+            BYTE replyCrc = 0;
+            for (int i = 2; i < 88; i++) replyCrc ^= a[i];
+            // Someone else's reply, or ours is not there yet: keep reading until the window closes.
+            if (a[1] != tid || a[2] || a[3] || a[4] || a[5] != size || a[6] != cls || a[7] != id ||
+                a[88] != replyCrc) continue;
+            if (a[0] == 0x01) continue;  // busy: this request is still being processed
+            if (a[0] == 0x02) { args.assign(a + 8, a + 88); return Rz::Ok; }
+            if (a[0] == 0x05 || a[0] == 0x03) return Rz::Unsupported;
+            if (a[0] == 0x04) {  // the receiver got no answer from the device: retry a transient timeout twice
+                res = Rz::Offline;
+                if (++offline >= 3) return Rz::Offline;
+            }
+            resend = true;
+        }
+    } while (GetTickCount64() < deadline);
     return res;
 }
 
@@ -115,35 +133,72 @@ DeviceKind Kind(const std::vector<HidColl>& colls, USHORT vid, USHORT pid) {
 
 void PollRazer(PollContext& ctx) {
     std::vector<std::wstring> seenNames;
+    auto describe = [&](const HidColl& c, USHORT vid, USHORT pid) {
+        DeviceStatus s;
+        s.name = CleanName(HidProduct(c));
+        // Keyed by name, not product id: a wireless mouse has one id on the cable (DeathAdder V3 Pro: 00B6)
+        // and another through its receiver (00B7). With the id in the key, plugging the cable in or out
+        // made a second icon appear while the old one lingered for the grace period.
+        s.key = L"razer:" + s.name;
+        s.kind = Kind(ctx.colls, vid, pid);
+        if (s.kind == DeviceKind::Other) s.kind = GuessKind(s.name);
+        s.via = L"Razer receiver";
+        s.graceSec = 120;  // retain the last reading briefly when Synapse prevents a valid reply
+        return s;
+    };
+    // Adds the device, or merges it into the same device already seen on another link (cable + receiver).
+    auto emit = [&](const DeviceStatus& s, USHORT vid, USHORT pid) {
+        bool dup = false;
+        for (auto& n : seenNames) dup |= n == s.name;
+        if (!dup) {
+            seenNames.push_back(s.name);
+            ctx.Add(s, vid, pid);
+            return;
+        }
+        ctx.Claim(vid, pid);
+        for (auto& o : ctx.out) {
+            if (o.name != s.name) continue;
+            bool charging = o.charging || s.charging;
+            // Keep whichever link answered: while the cable is in, the receiver often reports the
+            // mouse as offline, and right after unplugging the cable side is the stale one.
+            if (o.percent < 0 && s.percent >= 0) {
+                unsigned short v = o.vid;
+                o = s;
+                o.vid = v;
+            }
+            o.charging = charging;
+            if (o.percent >= 0) o.asleep = false;
+        }
+    };
     for (auto [vid, pid] : ctx.Products(0x1532)) {
+        bool done = false;
+        const HidColl* silent = nullptr;  // a battery collection that opened but never answered
         for (const HidColl* c : ctx.Find(vid, pid, [](const HidColl& c) { return c.featLen() == 91; })) {
             HidDev d;
             if (!d.OpenFeatureOnly(*c)) continue;
             Rz res = Rz::NoReply;
             BYTE tid = 0;
             std::vector<BYTE> args;
-            bool sawOffline = false;
+            bool sawOffline = false, sawUnsupported = false;
             BYTE keyboardTid = KeyboardBatteryTid(pid);
             std::vector<BYTE> tids = keyboardTid ? std::vector<BYTE>{ keyboardTid } :
                                                   std::vector<BYTE>{ 0x1F, 0x3F, 0xFF, 0x08, 0x9F };
+            if (auto good = g_goodTid.find(pid); good != g_goodTid.end()) {
+                tids.erase(std::remove(tids.begin(), tids.end(), good->second), tids.end());
+                tids.insert(tids.begin(), good->second);
+            }
             for (BYTE t : tids) {
                 Rz r = Command(d, t, 0x07, 0x80, 0x02, args);
-                if (r == Rz::Ok) { res = r; tid = t; break; }
+                if (r == Rz::Ok) { res = r; tid = t; g_goodTid[pid] = t; break; }
                 sawOffline |= r == Rz::Offline;  // may also mean "wrong transaction id": keep trying
+                sawUnsupported |= r == Rz::Unsupported;
             }
             if (res != Rz::Ok && sawOffline) res = Rz::Offline;
-            if (res != Rz::Ok && res != Rz::Offline) continue;
-
-            DeviceStatus s;
-            s.name = CleanName(HidProduct(*c));
-            // Keyed by name, not product id: a wireless mouse has one id on the cable (DeathAdder V3 Pro: 00B6)
-            // and another through its receiver (00B7). With the id in the key, plugging the cable in or out
-            // made a second icon appear while the old one lingered for the grace period.
-            s.key = L"razer:" + s.name;
-            s.kind = Kind(ctx.colls, vid, pid);
-            if (s.kind == DeviceKind::Other) s.kind = GuessKind(s.name);
-            s.via = L"Razer receiver";
-            s.graceSec = 120;  // retain the last reading briefly when Synapse prevents a valid reply
+            if (res != Rz::Ok && res != Rz::Offline) {
+                if (!sawUnsupported && !silent) silent = c;
+                continue;
+            }
+            DeviceStatus s = describe(*c, vid, pid);
             if (res == Rz::Offline) {
                 // The receiver answers but the device does not: it is asleep (a DeathAdder V3 Pro sleeps
                 // after about a minute idle) or switched off. Keep its last reading on screen, dimmed,
@@ -154,29 +209,19 @@ void PollRazer(PollContext& ctx) {
                 std::vector<BYTE> ch;
                 if (Command(d, tid, 0x07, 0x84, 0x02, ch) == Rz::Ok) s.charging = ch[1] == 1;
             }
-            // A wireless mouse plugged in for charging shows up twice (cable + dongle); keep one.
-            bool dup = false;
-            for (auto& n : seenNames) dup |= n == s.name;
-            if (!dup) {
-                seenNames.push_back(s.name);
-                ctx.Add(s, vid, pid);
-            } else {
-                ctx.Claim(vid, pid);
-                for (auto& o : ctx.out) {
-                    if (o.name != s.name) continue;
-                    bool charging = o.charging || s.charging;
-                    // Keep whichever link answered: while the cable is in, the receiver often reports the
-                    // mouse as offline, and right after unplugging the cable side is the stale one.
-                    if (o.percent < 0 && s.percent >= 0) {
-                        unsigned short v = o.vid;
-                        o = s;
-                        o.vid = v;
-                    }
-                    o.charging = charging;
-                    if (o.percent >= 0) o.asleep = false;
-                }
-            }
+            emit(s, vid, pid);
+            done = true;
             break;
+        }
+        // No reply at all, typically right after start-up while Synapse or the receiver is still busy. A device
+        // that has reported a battery before stays on screen as asleep (with its last reading) instead of
+        // disappearing until a later poll; anything else (wired mice, speakers) stays hidden as before.
+        if (!done && silent) {
+            DeviceStatus s = describe(*silent, vid, pid);
+            if (ctx.known.count(s.key)) {
+                s.asleep = true;
+                emit(s, vid, pid);
+            }
         }
     }
 }

@@ -26,3 +26,7 @@ std::vector<DeviceStatus> PollAllDevices();
 
 // Prints every HID collection (for adding support for new devices).
 std::wstring DumpHidCollections();
+
+// Keys of devices that reported a battery level before (the app keeps them across restarts). A driver may keep
+// such a device on screen as asleep when it does not answer, instead of dropping it. Safe to call from any thread.
+void SetKnownBatteryDevices(const std::vector<std::wstring>& keys);

@@ -7,8 +7,22 @@
 #include "drivers/drivers.h"
 #include "hid.h"
 
+namespace {
+SRWLOCK g_knownLock = SRWLOCK_INIT;
+std::set<std::wstring> g_known;  // guarded by g_knownLock: set on the UI thread, read by the poll thread
+}  // namespace
+
+void SetKnownBatteryDevices(const std::vector<std::wstring>& keys) {
+    AcquireSRWLockExclusive(&g_knownLock);
+    g_known = std::set<std::wstring>(keys.begin(), keys.end());
+    ReleaseSRWLockExclusive(&g_knownLock);
+}
+
 std::vector<DeviceStatus> PollAllDevices() {
     PollContext ctx;
+    AcquireSRWLockShared(&g_knownLock);
+    ctx.known = g_known;
+    ReleaseSRWLockShared(&g_knownLock);
     ctx.colls = EnumHid();
     PollGlorious(ctx);
     PollAula(ctx);       // before Kysona, which shares the 3554 vendor id and would probe it first

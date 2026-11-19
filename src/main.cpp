@@ -58,6 +58,8 @@ struct TrayEntry {
     HICON icon = nullptr;
 };
 std::map<std::wstring, TrayEntry> g_entries;
+bool g_demo = false;     // --demo: sample devices instead of real ones (see DemoDevices)
+bool g_demoAll = false;  // --demo=all: one device of every brand
 bool g_placeholder = false;
 HICON g_placeholderIcon = nullptr;
 
@@ -114,6 +116,37 @@ void SaveHidden() {
 }
 
 bool IsHidden(const std::wstring& key) { return g_hidden.count(key) != 0; }
+
+// Last known level per device, kept across restarts (REG_MULTI_SZ "LastLevels", lines "<percent>\t<key>"): a mouse
+// that is asleep when the PC starts then shows its last reading, dimmed, instead of "?" until it is moved.
+std::map<std::wstring, int> g_lastLevels;
+
+void LoadLastLevels() {
+    DWORD size = 0;
+    if (RegGetValueW(HKEY_CURRENT_USER, kSettingsKey, L"LastLevels", RRF_RT_REG_MULTI_SZ, nullptr, nullptr, &size) != ERROR_SUCCESS || !size)
+        return;
+    std::vector<wchar_t> buf(size / sizeof(wchar_t) + 1, 0);
+    if (RegGetValueW(HKEY_CURRENT_USER, kSettingsKey, L"LastLevels", RRF_RT_REG_MULTI_SZ, nullptr, buf.data(), &size) != ERROR_SUCCESS)
+        return;
+    for (const wchar_t* p = buf.data(); *p; p += wcslen(p) + 1) {
+        const wchar_t* tab = wcschr(p, L'\t');
+        int pct = _wtoi(p);
+        if (tab && tab[1] && pct >= 0 && pct <= 100) g_lastLevels[tab + 1] = pct;
+    }
+}
+
+void SaveLastLevels() {
+    std::wstring multi;
+    for (const auto& [k, pct] : g_lastLevels) { multi += std::to_wstring(pct) + L"\t" + k; multi.push_back(L'\0'); }
+    multi.push_back(L'\0');
+    RegSetKeyValueW(HKEY_CURRENT_USER, kSettingsKey, L"LastLevels", REG_MULTI_SZ, multi.data(), (DWORD)(multi.size() * sizeof(wchar_t)));
+}
+
+void PublishKnownDevices() {  // lets drivers keep a known device on screen when it does not answer
+    std::vector<std::wstring> keys;
+    for (const auto& [k, pct] : g_lastLevels) keys.push_back(k);
+    SetKnownBatteryDevices(keys);
+}
 
 bool IsEntryHidden(const TrayEntry& e) {
     return IsHidden(e.st.key) || (g_hideLastKnown && (e.st.asleep || (e.st.percent < 0 && e.lastPct >= 0)));
@@ -443,12 +476,24 @@ void UpdateWidget() {
 
 void OnResults(std::vector<DeviceStatus>& results) {
     std::map<std::wstring, bool> seen;
+    bool levelsChanged = false;
     for (auto& s : results) {
         Polish(s);
         auto& e = g_entries[s.key];
-        if (!e.uid) e.uid = StableId(s.key);
+        if (!e.uid) {
+            e.uid = StableId(s.key);
+            auto known = g_lastLevels.find(s.key);
+            if (known != g_lastLevels.end()) e.lastPct = known->second;
+        }
         e.st = s;
-        if (s.percent >= 0) e.lastPct = s.percent;
+        if (s.percent >= 0) {
+            e.lastPct = s.percent;
+            auto known = g_lastLevels.find(s.key);
+            if (known == g_lastLevels.end() || known->second != s.percent) {
+                g_lastLevels[s.key] = s.percent;
+                levelsChanged = true;
+            }
+        }
         e.lastSeen = GetTickCount64();
         seen[s.key] = true;
         ApplyEntry(e);
@@ -470,6 +515,10 @@ void OnResults(std::vector<DeviceStatus>& results) {
         } else {
             ++it;
         }
+    }
+    if (levelsChanged && !g_demo) {
+        SaveLastLevels();
+        PublishKnownDevices();
     }
     UpdatePlaceholder();
     UpdateWidget();
@@ -583,8 +632,6 @@ void ShowMenu() {
 // `--demo`: sample Razer and Logitech devices instead of real ones (screenshots, checking the colours
 // without the hardware). "G915 TKL" has no vendor id on purpose: it exercises the name-based match.
 // `--demo=all`: one device of every brand with its own colour, plus one without (Bose).
-bool g_demo = false;
-bool g_demoAll = false;
 
 std::vector<DeviceStatus> DemoAllBrands() {
     auto make = [](const wchar_t* key, const wchar_t* name, DeviceKind kind, int pct, unsigned short vid, bool charging) {
@@ -650,21 +697,22 @@ DWORD WINAPI Worker(LPVOID) {
     }
 }
 
-// After a device is plugged in or out: refresh after 1 s, then again 4 s and 12 s after the change. A mouse
-// switching between cable and receiver needs a few seconds before it answers on the new link, and a single
-// refresh that came too early left the old state on screen until the next regular poll a minute later.
-constexpr UINT kFollowUpMs[] = { 1000, 3000, 8000 };
-int g_followUp = -1;  // index of the follow-up refresh now pending, -1 = none
+// Extra refreshes on top of the regular poll, each delay counted from the previous one. After a device is plugged
+// in or out: 1 s, then 4 s and 12 s after the change (a mouse switching between cable and receiver needs a few
+// seconds before it answers on the new link). After start-up: 10 s and 30 s; after wake: 5, 10 and 30 s, because a receiver often
+// misses the first query while Synapse or the device itself is still starting. Without these, a single early miss
+// left the old state on screen until the next regular poll a minute later.
+std::vector<UINT> g_followUps;  // delays still to come
 
-void RefreshSoon(UINT ms) {
-    g_followUp = -1;
-    SetTimer(g_hwnd, TIMER_DEBOUNCE, ms, nullptr);
+void RefreshSequence(std::vector<UINT> delays) {  // a new sequence replaces the one in progress
+    if (delays.empty()) return;
+    UINT first = delays.front();
+    g_followUps.assign(delays.begin() + 1, delays.end());
+    SetTimer(g_hwnd, TIMER_DEBOUNCE, first, nullptr);
 }
 
-void RefreshAfterDeviceChange() {  // several arrivals in a row restart the sequence
-    g_followUp = 0;
-    SetTimer(g_hwnd, TIMER_DEBOUNCE, kFollowUpMs[0], nullptr);
-}
+void RefreshAfterDeviceChange() { RefreshSequence({ 1000, 3000, 8000 }); }
+void RefreshAfterStart() { RefreshSequence({ 10000, 20000 }); }
 
 LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     if (msg == g_taskbarCreatedMsg && msg != 0) {  // Explorer restarted
@@ -698,16 +746,17 @@ LRESULT CALLBACK WndProc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             if (wp == DBT_DEVICEARRIVAL || wp == DBT_DEVICEREMOVECOMPLETE) RefreshAfterDeviceChange();
             return TRUE;
         case WM_POWERBROADCAST:
-            if (wp == PBT_APMRESUMEAUTOMATIC) RefreshSoon(5000);
+            if (wp == PBT_APMRESUMEAUTOMATIC) RefreshSequence({ 5000, 5000, 20000 });
             return TRUE;
         case WM_TIMER:
             if (wp == TIMER_DEBOUNCE) {
                 KillTimer(h, TIMER_DEBOUNCE);
                 SetEvent(g_refreshEvt);
-                if (g_followUp >= 0 && ++g_followUp < (int)ARRAYSIZE(kFollowUpMs))
-                    SetTimer(h, TIMER_DEBOUNCE, kFollowUpMs[g_followUp], nullptr);
-                else
-                    g_followUp = -1;
+                if (!g_followUps.empty()) {
+                    UINT next = g_followUps.front();
+                    g_followUps.erase(g_followUps.begin());
+                    SetTimer(h, TIMER_DEBOUNCE, next, nullptr);
+                }
             }
             if (wp == TIMER_WIDGET) Reconcile();
             return 0;
@@ -909,10 +958,13 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, PWSTR cmdLine, int) {
     g_widgetBackground = LoadWidgetBackground();
     widget::SetBackground(g_widgetBackground);  // remembered by the widget across re-creation
     LoadHidden();
+    LoadLastLevels();
+    PublishKnownDevices();
     Reconcile();
     UpdatePlaceholder();  // something to click on until the first poll finishes
     SetTimer(g_hwnd, TIMER_WIDGET, 1000, nullptr);
     g_worker = CreateThread(nullptr, 0, Worker, nullptr, 0, nullptr);
+    RefreshAfterStart();
 
     MSG m;
     while (GetMessageW(&m, nullptr, 0, 0) > 0) {
